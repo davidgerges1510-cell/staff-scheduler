@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Staff Scheduler — Login</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+     background:linear-gradient(135deg,#1a9e9e 0%,#4A6FA5 100%);
+     min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:#fff;border-radius:20px;padding:40px 36px;width:100%;max-width:420px;
+      box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.logo{text-align:center;margin-bottom:28px}
+.logo-icon{width:72px;height:72px;background:linear-gradient(135deg,#1a9e9e,#4A6FA5);
+           border-radius:18px;display:inline-flex;align-items:center;justify-content:center;
+           font-size:36px;margin-bottom:12px}
+.logo h1{font-size:22px;font-weight:700;color:#1a9e9e;margin-bottom:4px}
+.logo p{font-size:12px;color:#718096}
+.err{background:#fed7d7;color:#c53030;padding:10px 14px;border-radius:9px;
+     font-size:13px;margin-bottom:16px}
+.fg{margin-bottom:16px}
+.fg label{display:block;font-size:12px;font-weight:600;color:#718096;margin-bottom:6px}
+.fg input{width:100%;padding:11px 14px;border:2px solid #e2e8f0;border-radius:10px;
+          font-size:14px;transition:border-color .2s;outline:none;font-family:inherit}
+.fg input:focus{border-color:#1a9e9e}
+.btn{width:100%;padding:12px;background:linear-gradient(135deg,#1a9e9e,#4A6FA5);
+     color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;
+     cursor:pointer;transition:opacity .2s;font-family:inherit}
+.btn:hover{opacity:.9}
+.hint{margin-top:20px;padding:12px 14px;background:#f0f4f8;border-radius:9px;font-size:11px;color:#718096}
+.hint b{color:#2d3748}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="logo-icon">📅</div>
+    <h1>Staff Scheduler</h1>
+    <p>Shift Management System</p>
+  </div>
+  {% if error %}
+  <div class="err">⚠️ {{ error }}</div>
+  {% endif %}
+  <form method="POST">
+    <div class="fg">
+      <label>USERNAME</label>
+      <input type="text" name="username" placeholder="Enter your username" autocomplete="username" autofocus>
+    </div>
+    <div class="fg">
+      <label>PASSWORD</label>
+      <input type="password" name="password" placeholder="Enter your password" autocomplete="current-password">
+    </div>
+    <button type="submit" class="btn">Sign In →</button>
+  </form>
+  <div class="hint">
+    <b>Admin:</b> username <code>admin</code>, leave password empty.<br>
+    <b>Employees:</b> use the password set by your admin.
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Staff Scheduler</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--t:#1a9e9e;--td:#147a7a;--tl:#e0f7f7;--bl:#4A6FA5;--bg:#f0f4f8;--w:#fff;
+      --tx:#2d3748;--mu:#718096;--br:#e2e8f0;--sh:0 2px 12px rgba(0,0,0,.08);--r:12px}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+     background:var(--bg);color:var(--tx);min-height:100vh}
+/* SIDEBAR */
+.sb{position:fixed;left:0;top:0;bottom:0;width:240px;
+    background:linear-gradient(180deg,#1a9e9e,#147a7a);color:#fff;
+    z-index:200;display:flex;flex-direction:column;transition:transform .3s}
+.sbh{padding:18px 16px;border-bottom:1px solid rgba(255,255,255,.15)}
+.sbh h2{font-size:15px;font-weight:700}
+.sbh p{font-size:11px;opacity:.7;margin-top:2px}
+.sbn{flex:1;padding:8px;overflow-y:auto}
+.ni{display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:9px;
+    cursor:pointer;font-size:13px;font-weight:500;color:rgba(255,255,255,.82);
+    margin-bottom:2px;transition:all .18s;position:relative}
+.ni:hover,.ni.on{background:rgba(255,255,255,.2);color:#fff}
+.nio{font-size:16px;width:22px;flex-shrink:0;text-align:center}
+.nbadge{background:#e53e3e;color:#fff;border-radius:10px;font-size:10px;
+        padding:1px 6px;margin-left:auto;font-weight:700}
+.sbf{padding:12px;border-top:1px solid rgba(255,255,255,.15)}
+.ur{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-weight:700;font-size:13px;flex-shrink:0}
+.un{font-size:12px;font-weight:600}
+.ur2{font-size:10px;opacity:.7}
+.blg{width:100%;background:rgba(255,255,255,.15);border:none;border-radius:8px;
+     padding:7px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.blg:hover{background:rgba(255,255,255,.25)}
+/* MAIN */
+main{margin-left:240px;padding:24px;min-height:100vh}
+.ph{margin-bottom:20px}
+.ph h1{font-size:20px;font-weight:700}
+.ph p{font-size:12px;color:var(--mu);margin-top:3px}
+.view{display:none}.view.on{display:block}
+.card{background:#fff;border-radius:var(--r);box-shadow:var(--sh);padding:20px;margin-bottom:18px}
+.ct{font-size:15px;font-weight:700;margin-bottom:14px;
+    display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ct-l{display:flex;align-items:center;gap:8px}
+/* STATS */
+.sg{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px}
+.sc{background:#fff;border-radius:var(--r);box-shadow:var(--sh);padding:16px;
+    display:flex;flex-direction:column;align-items:center;text-align:center}
+.si{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:20px;margin-bottom:6px}
+.sv{font-size:24px;font-weight:700;color:var(--t)}
+.sl{font-size:11px;color:var(--mu);margin-top:2px}
+/* BUTTONS */
+.btn{padding:9px 15px;border:none;border-radius:9px;font-size:13px;font-weight:600;
+     cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .18s;
+     font-family:inherit}
+.bp{background:var(--t);color:#fff}.bp:hover{background:var(--td)}
+.bs{background:var(--bl);color:#fff}.bs:hover{background:#3a5a8a}
+.bsuc{background:#48bb78;color:#fff}.bsuc:hover{background:#38a169}
+.bdan{background:#e53e3e;color:#fff}.bdan:hover{background:#c53030}
+.bol{background:transparent;border:2px solid var(--t);color:var(--t)}.bol:hover{background:var(--tl)}
+.bgr{background:transparent;border:2px solid var(--br);color:var(--mu)}.bgr:hover{border-color:var(--t);color:var(--t)}
+.bsm{padding:5px 10px;font-size:11px;border-radius:7px}
+/* FORMS */
+.fg{margin-bottom:13px}
+.fg label{display:block;font-size:11px;font-weight:600;color:var(--mu);margin-bottom:5px;text-transform:uppercase}
+.fg input,.fg select,.fg textarea{width:100%;padding:9px 12px;border:2px solid var(--br);
+  border-radius:9px;font-size:13px;transition:border .2s;font-family:inherit;background:#fff}
+.fg input:focus,.fg select:focus,.fg textarea:focus{outline:none;border-color:var(--t)}
+.fg textarea{resize:vertical;min-height:60px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+/* TABLE */
+.tw{overflow-x:auto}
+.et{width:100%;border-collapse:collapse;font-size:12px}
+.et th{padding:9px 10px;background:#f7fafc;font-weight:600;text-align:left;
+       white-space:nowrap;border-bottom:2px solid var(--br)}
+.et td{padding:8px 10px;border-bottom:1px solid var(--br);vertical-align:middle}
+.et tr:last-child td{border:none}
+.et tr:hover td{background:#f7fafc}
+.ea{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-weight:700;font-size:11px;flex-shrink:0}
+/* STATUS BADGES */
+.stb{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700}
+.stpending{background:#fef3c7;color:#744210}
+.stapproved{background:#c6f6d5;color:#276749}
+.strejected{background:#fed7d7;color:#9b2c2c}
+/* SHIFT BADGES */
+.bdg{display:inline-block;padding:2px 7px;border-radius:5px;font-size:10px;
+     font-weight:700;font-family:monospace;white-space:nowrap}
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
+          z-index:500;align-items:center;justify-content:center;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:480px;
+       max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.mn{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.mn h2{font-size:16px;font-weight:700}
+.mn button{background:var(--tl);border:none;border-radius:8px;
+           padding:5px 11px;cursor:pointer;font-size:18px;color:var(--td);font-weight:700}
+/* SCHEDULE TABLE */
+.sch-wrap{overflow-x:auto}
+.sch{border-collapse:collapse;font-size:11px;min-width:600px}
+.sch th{padding:7px 4px;background:#f7fafc;font-weight:600;text-align:center;
+        border:1px solid var(--br);white-space:nowrap;font-size:10px}
+.sch td{padding:4px 2px;border:1px solid var(--br);text-align:center;min-width:38px}
+.sch td.ce{cursor:pointer}.sch td.ce:hover{background:var(--tl)}
+.sch td.tc{background:#e0f7f7}
+.sch .emp-cell{text-align:left;padding:6px 8px;white-space:nowrap;position:sticky;left:0;
+              background:#fff;z-index:1;min-width:140px}
+/* CALENDAR */
+.cg{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.ch{background:#f7fafc;border-radius:7px;padding:6px 3px;text-align:center;
+    font-size:10px;font-weight:700;color:var(--mu)}
+.cd{border-radius:7px;padding:5px 3px;text-align:center;min-height:52px;
+    background:#fff;border:1.5px solid var(--br);cursor:pointer;transition:border .15s}
+.cd:hover{border-color:var(--t);background:var(--tl)}
+.cd.today{border-color:var(--t);background:var(--tl)}
+.cd.empty{background:transparent;border-color:transparent;cursor:default}
+.cd.empty:hover{background:transparent;border-color:transparent}
+.cd.has-pending{border-color:#ed8936}
+.dn{font-size:10px;font-weight:600;color:var(--mu);margin-bottom:2px}
+.ds{border-radius:4px;padding:2px 3px;font-size:9px;font-weight:700;
+    text-align:center;font-family:monospace}
+/* REQUEST CARD */
+.rc{background:#f7fafc;border-radius:10px;padding:14px;margin-bottom:10px;
+    border-left:3px solid var(--br)}
+.rc.pending{border-color:#ed8936}.rc.approved{border-color:#48bb78}.rc.rejected{border-color:#e53e3e}
+.rh{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+/* TABS */
+.tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.tab{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;
+     cursor:pointer;border:2px solid var(--br);color:var(--mu);background:#fff;transition:all .18s}
+.tab.on{background:var(--t);color:#fff;border-color:var(--t)}
+/* LEGEND */
+.leg{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.leg-item{display:flex;align-items:center;gap:4px;font-size:11px}
+.leg-dot{width:12px;height:12px;border-radius:3px}
+/* ALERT/TOAST */
+.toast{position:fixed;bottom:24px;right:24px;background:#2d3748;color:#fff;
+       padding:12px 18px;border-radius:10px;font-size:13px;z-index:9999;
+       opacity:0;transition:opacity .3s;pointer-events:none;max-width:300px}
+.toast.show{opacity:1}
+.toast.ok{background:#38a169}
+.toast.err{background:#e53e3e}
+/* MOBILE */
+.mob-header{display:none;background:#fff;padding:12px 16px;
+            align-items:center;justify-content:space-between;
+            box-shadow:0 2px 8px rgba(0,0,0,.08);position:sticky;top:0;z-index:50}
+.ham{width:28px;cursor:pointer;display:flex;flex-direction:column;gap:4px}
+.ham span{display:block;height:2px;background:var(--t);border-radius:2px}
+.ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:150}
+.ov.show{display:block}
+.err-msg{background:#fed7d7;color:#c53030;padding:9px 12px;border-radius:8px;
+         font-size:12px;margin-bottom:10px;display:none}
+.ok-msg{background:#c6f6d5;color:#276749;padding:9px 12px;border-radius:8px;
+        font-size:12px;margin-bottom:10px;display:none}
+.shift-picker{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}
+.sp-opt{padding:7px 12px;border-radius:8px;border:2px solid var(--br);
+        font-size:12px;font-weight:600;cursor:pointer;transition:border .15s}
+.sp-opt.sel{border-color:var(--t);box-shadow:0 0 0 2px rgba(26,158,158,.3)}
+@media(max-width:768px){
+  .sb{transform:translateX(-100%)}.sb.open{transform:translateX(0)}
+  main{margin-left:0;padding:16px}
+  .mob-header{display:flex}
+  .g2{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<!-- MOBILE HEADER -->
+<div class="mob-header">
+  <div class="ham" onclick="toggleSB()"><span></span><span></span><span></span></div>
+  <span style="font-weight:700;color:var(--t)" id="mobTitle">Dashboard</span>
+  <span style="font-size:18px">📅</span>
+</div>
+<div class="ov" id="sbOv" onclick="toggleSB()"></div>
+
+<!-- SIDEBAR -->
+<div class="sb" id="sidebar">
+  <div class="sbh">
+    <h2>📅 Staff Scheduler</h2>
+    <p>Shift Management System</p>
+  </div>
+  <div class="sbn" id="navList"></div>
+  <div class="sbf">
+    <div class="ur">
+      <div class="av" id="sbAvatar" style="background:{{ user.color }}">{{ user.initials() }}</div>
+      <div>
+        <div class="un">{{ user.name }}</div>
+        <div class="ur2">{{ user.role|capitalize }}</div>
+      </div>
+    </div>
+    <button class="blg" onclick="location.href='/logout'">⬅ Sign Out</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<main id="mainContent">
+  <div class="ph"><h1 id="pgTitle">Dashboard</h1><p id="pgSub"></p></div>
+
+  {% if user.role == 'admin' %}
+  <!-- ═══════════ ADMIN DASHBOARD ═══════════ -->
+  <div class="view" id="v-dashboard">
+    <div class="sg" id="statsGrid"></div>
+    <div class="card">
+      <div class="ct"><div class="ct-l">🔔 Pending Requests</div>
+        <button class="btn bgr bsm" onclick="navTo('requests')">View All</button></div>
+      <div id="pendingList"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ EMPLOYEES ═══════════ -->
+  <div class="view" id="v-employees">
+    <div class="card">
+      <div class="ct">
+        <div class="ct-l">👥 Employees</div>
+        <button class="btn bp bsm" onclick="openModal('mAddEmp')">+ Add Employee</button>
+      </div>
+      <div class="tw"><table class="et" id="empTable">
+        <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Department</th>
+          <th>Annual</th><th>Sick</th><th>Pending</th><th>Actions</th></tr></thead>
+        <tbody id="empBody"></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ ADMIN SCHEDULE ═══════════ -->
+  <div class="view" id="v-schedule">
+    <div class="card">
+      <div class="ct">
+        <div class="ct-l">📅 Schedule Editor</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn bgr bsm" onclick="changeMonth(-1)">◀</button>
+          <span id="adMonthLabel" style="font-weight:600;font-size:13px;min-width:120px;text-align:center"></span>
+          <button class="btn bgr bsm" onclick="changeMonth(1)">▶</button>
+        </div>
+      </div>
+      <div class="leg" id="schLeg"></div>
+      <div class="sch-wrap"><table class="sch">
+        <thead id="schHead"></thead>
+        <tbody id="schBody"></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ ALL REQUESTS ═══════════ -->
+  <div class="view" id="v-requests">
+    <div class="card">
+      <div class="ct"><div class="ct-l">📋 All Requests</div></div>
+      <div class="tabs">
+        <div class="tab on" onclick="setReqFilter('all',this)">All</div>
+        <div class="tab" onclick="setReqFilter('pending',this)">⏳ Pending</div>
+        <div class="tab" onclick="setReqFilter('approved',this)">✅ Approved</div>
+        <div class="tab" onclick="setReqFilter('rejected',this)">❌ Rejected</div>
+      </div>
+      <div class="tabs" style="margin-top:-8px">
+        <div class="tab on" onclick="setTypeFilter('all',this)" style="font-size:11px">All Types</div>
+        <div class="tab" onclick="setTypeFilter('leave',this)" style="font-size:11px">✈️ Leave</div>
+        <div class="tab" onclick="setTypeFilter('swap',this)" style="font-size:11px">🔄 Swap</div>
+        <div class="tab" onclick="setTypeFilter('draft',this)" style="font-size:11px">✏️ Draft</div>
+      </div>
+      <div id="reqList"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SETTINGS ═══════════ -->
+  <div class="view" id="v-settings">
+    <div class="card">
+      <div class="ct"><div class="ct-l">✉️ Email Notifications</div></div>
+      <div class="fg" style="max-width:120px">
+        <label>Enable Email</label>
+        <select id="setEmailEnabled">
+          <option value="false">Disabled</option>
+          <option value="true">Enabled</option>
+        </select>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>SMTP Server</label><input id="setSmtpServer" placeholder="smtp.gmail.com"></div>
+        <div class="fg"><label>SMTP Port</label><input id="setSmtpPort" placeholder="587" type="number"></div>
+      </div>
+      <div class="fg"><label>Email (Sender)</label><input id="setSmtpUser" placeholder="yourmail@gmail.com"></div>
+      <div class="fg"><label>App Password</label><input id="setSmtpPass" type="password" placeholder="Gmail App Password"></div>
+      <div class="fg"><label>Sender Name</label><input id="setFromName" placeholder="Staff Scheduler"></div>
+      <div class="g2">
+        <div class="fg"><label>Day Shift Hours</label><input id="setDayHours" type="number" placeholder="12"></div>
+        <div class="fg"><label>Night Shift Hours</label><input id="setNightHours" type="number" placeholder="12"></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn bp" onclick="saveSettings()">💾 Save Settings</button>
+        <button class="btn bgr" onclick="testEmail()">📧 Test Email</button>
+      </div>
+    </div>
+  </div>
+
+  {% else %}
+  <!-- ═══════════ EMPLOYEE SCHEDULE ═══════════ -->
+  <div class="view" id="v-my-schedule">
+    <div class="card">
+      <div class="ct">
+        <div class="ct-l">📅 My Schedule</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn bgr bsm" onclick="changeMonth(-1)">◀</button>
+          <span id="empMonthLabel" style="font-weight:600;font-size:13px;min-width:120px;text-align:center"></span>
+          <button class="btn bgr bsm" onclick="changeMonth(1)">▶</button>
+        </div>
+      </div>
+      <div id="empStats" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+      <div class="leg" id="empLeg"></div>
+      <div class="cg" id="empCal"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ TEAM SCHEDULE ═══════════ -->
+  <div class="view" id="v-team">
+    <div class="card">
+      <div class="ct">
+        <div class="ct-l">👥 Team Schedule</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn bgr bsm" onclick="changeMonth(-1)">◀</button>
+          <span id="teamMonthLabel" style="font-weight:600;font-size:13px;min-width:120px;text-align:center"></span>
+          <button class="btn bgr bsm" onclick="changeMonth(1)">▶</button>
+        </div>
+      </div>
+      <div class="leg" id="teamLeg"></div>
+      <div class="sch-wrap"><table class="sch">
+        <thead id="teamHead"></thead>
+        <tbody id="teamBody"></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ LEAVE REQUEST ═══════════ -->
+  <div class="view" id="v-leave">
+    <div class="card">
+      <div class="ct"><div class="ct-l">✈️ Submit Leave Request</div></div>
+      <div id="leaveErr" class="err-msg"></div>
+      <div class="fg">
+        <label>Leave Type</label>
+        <select id="leaveType">
+          <option value="annual">Annual Leave</option>
+          <option value="sick">Sick Leave</option>
+          <option value="personal">Personal Leave</option>
+          <option value="unpaid">Unpaid Leave</option>
+        </select>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Start Date</label><input type="date" id="leaveStart"></div>
+        <div class="fg"><label>End Date</label><input type="date" id="leaveEnd"></div>
+      </div>
+      <div class="fg"><label>Reason</label><textarea id="leaveReason" placeholder="Reason for leave..."></textarea></div>
+      <button class="btn bp" onclick="submitLeave()">📤 Submit Request</button>
+    </div>
+    <div class="card">
+      <div class="ct"><div class="ct-l">My Leave History</div></div>
+      <div id="myLeaveList"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SWAP REQUEST ═══════════ -->
+  <div class="view" id="v-swap">
+    <div class="card">
+      <div class="ct"><div class="ct-l">🔄 Submit Swap Request</div></div>
+      <div id="swapErr" class="err-msg"></div>
+      <div class="fg">
+        <label>Swap Date</label>
+        <input type="date" id="swapDate" onchange="loadSwapInfo()">
+      </div>
+      <div class="fg">
+        <label>Swap With</label>
+        <select id="swapTarget"></select>
+      </div>
+      <div id="swapInfo" style="display:none;margin-bottom:12px;padding:10px;background:#f7fafc;border-radius:8px;font-size:12px"></div>
+      <div class="fg"><label>Reason (optional)</label><textarea id="swapReason" placeholder="Why do you need this swap?"></textarea></div>
+      <button class="btn bp" onclick="submitSwap()">📤 Submit Request</button>
+    </div>
+    <div class="card">
+      <div class="ct"><div class="ct-l">My Swap History</div></div>
+      <div id="mySwapList"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ DRAFT SCHEDULE ═══════════ -->
+  <div class="view" id="v-draft">
+    <div class="card">
+      <div class="ct">
+        <div class="ct-l">✏️ Draft Schedule</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn bgr bsm" onclick="changeMonth(-1)">◀</button>
+          <span id="draftMonthLabel" style="font-weight:600;font-size:13px;min-width:120px;text-align:center"></span>
+          <button class="btn bgr bsm" onclick="changeMonth(1)">▶</button>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--mu);margin-bottom:12px">
+        Click any day to propose a shift change. Your manager will review your proposals.</p>
+      <div class="leg" id="draftLeg"></div>
+      <div class="cg" id="draftCal"></div>
+    </div>
+    <div class="card">
+      <div class="ct"><div class="ct-l">My Proposals</div></div>
+      <div id="myDraftList"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ NOTIFICATIONS ═══════════ -->
+  <div class="view" id="v-notifications">
+    <div class="card">
+      <div class="ct">
+        <div class="ct-l">🔔 Notifications</div>
+        <button class="btn bgr bsm" onclick="markAllRead()">Mark all read</button>
+      </div>
+      <div id="notifList"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ MY PROFILE ═══════════ -->
+  <div class="view" id="v-profile">
+    <div class="card" id="profileCard"></div>
+  </div>
+
+  <!-- ═══════════ CHANGE PASSWORD ═══════════ -->
+  <div class="view" id="v-password">
+    <div class="card" style="max-width:420px">
+      <div class="ct"><div class="ct-l">🔑 Change Password</div></div>
+      <div id="pwErr" class="err-msg"></div>
+      <div id="pwOk" class="ok-msg"></div>
+      <div class="fg"><label>Current Password</label><input type="password" id="pwOld"></div>
+      <div class="fg"><label>New Password</label><input type="password" id="pwNew"></div>
+      <div class="fg"><label>Confirm Password</label><input type="password" id="pwCon"></div>
+      <button class="btn bp" onclick="changePassword()">💾 Update Password</button>
+    </div>
+  </div>
+  {% endif %}
+</main>
+
+<!-- ═══════════ MODALS ═══════════ -->
+<!-- ADD EMPLOYEE -->
+<div class="modal-bg" id="mAddEmp" onclick="if(event.target===this)closeModal('mAddEmp')">
+  <div class="modal">
+    <div class="mn"><h2>👤 Add Employee</h2><button onclick="closeModal('mAddEmp')">✕</button></div>
+    <div id="addEmpErr" class="err-msg"></div>
+    <div class="g2">
+      <div class="fg"><label>Full Name *</label><input id="addName" placeholder="Full name"></div>
+      <div class="fg"><label>Username *</label><input id="addUsername" placeholder="login username"></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Password *</label><input type="password" id="addPass" placeholder="min 4 chars"></div>
+      <div class="fg"><label>Email</label><input id="addEmail" placeholder="email@example.com"></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Department</label><input id="addDept" placeholder="e.g. Operations"></div>
+      <div class="fg"><label>Location</label><input id="addLoc" placeholder="e.g. Site A"></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Office</label><input id="addOffice" placeholder="e.g. Office 101"></div>
+      <div class="fg"><label>Phone</label><input id="addPhone" placeholder="05xxxxxxxx"></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Annual Leave Days</label><input type="number" id="addVac" value="21"></div>
+      <div class="fg"><label>Sick Leave Days</label><input type="number" id="addSick" value="14"></div>
+    </div>
+    <button class="btn bp" style="width:100%" onclick="addEmployee()">✅ Add Employee</button>
+  </div>
+</div>
+
+<!-- EDIT EMPLOYEE -->
+<div class="modal-bg" id="mEditEmp" onclick="if(event.target===this)closeModal('mEditEmp')">
+  <div class="modal">
+    <div class="mn"><h2>✏️ Edit Employee</h2><button onclick="closeModal('mEditEmp')">✕</button></div>
+    <input type="hidden" id="editEmpId">
+    <div class="g2">
+      <div class="fg"><label>Full Name</label><input id="editName"></div>
+      <div class="fg"><label>Email</label><input id="editEmail"></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Department</label><input id="editDept"></div>
+      <div class="fg"><label>Location</label><input id="editLoc"></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Office</label><input id="editOffice"></div>
+      <div class="fg"><label>Phone</label><input id="editPhone"></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Annual Leave Days</label><input type="number" id="editVac"></div>
+      <div class="fg"><label>Sick Leave Days</label><input type="number" id="editSick"></div>
+    </div>
+    <button class="btn bp" style="width:100%" onclick="saveEmployee()">💾 Save Changes</button>
+  </div>
+</div>
+
+<!-- SET PASSWORD -->
+<div class="modal-bg" id="mSetPw" onclick="if(event.target===this)closeModal('mSetPw')">
+  <div class="modal" style="max-width:360px">
+    <div class="mn"><h2>🔑 Set Password</h2><button onclick="closeModal('mSetPw')">✕</button></div>
+    <input type="hidden" id="setPwUid">
+    <div id="setPwErr" class="err-msg"></div>
+    <div class="fg"><label>New Password</label><input type="password" id="setPwVal" placeholder="min 4 characters"></div>
+    <div class="fg"><label>Confirm</label><input type="password" id="setPwCon" placeholder="confirm password"></div>
+    <button class="btn bp" style="width:100%" onclick="setPassword()">💾 Set Password</button>
+  </div>
+</div>
+
+<!-- EDIT SHIFT (admin) -->
+<div class="modal-bg" id="mShift" onclick="if(event.target===this)closeModal('mShift')">
+  <div class="modal" style="max-width:380px">
+    <div class="mn"><h2>📅 Edit Shift</h2><button onclick="closeModal('mShift')">✕</button></div>
+    <p id="shiftLabel" style="font-size:12px;color:var(--mu);margin-bottom:12px"></p>
+    <div class="shift-picker" id="shiftPicker"></div>
+    <button class="btn bp" style="width:100%;margin-top:8px" onclick="saveShift()">💾 Save</button>
+  </div>
+</div>
+
+<!-- ACTION (approve/reject) -->
+<div class="modal-bg" id="mAction" onclick="if(event.target===this)closeModal('mAction')">
+  <div class="modal" style="max-width:420px">
+    <div class="mn"><h2 id="actionTitle">Review Request</h2><button onclick="closeModal('mAction')">✕</button></div>
+    <div id="actionDetail" style="margin-bottom:14px"></div>
+    <div class="fg"><label>Admin Note (optional)</label>
+      <textarea id="actionNote" placeholder="Add a note for the employee..."></textarea></div>
+    <input type="hidden" id="actionRid">
+    <div style="display:flex;gap:10px">
+      <button class="btn bsuc" style="flex:1" onclick="doAction('approve')">✅ Approve</button>
+      <button class="btn bdan" style="flex:1" onclick="doAction('reject')">❌ Reject</button>
+    </div>
+  </div>
+</div>
+
+<!-- DRAFT MODAL -->
+<div class="modal-bg" id="mDraft" onclick="if(event.target===this)closeModal('mDraft')">
+  <div class="modal" style="max-width:400px">
+    <div class="mn"><h2>✏️ Propose Shift Change</h2><button onclick="closeModal('mDraft')">✕</button></div>
+    <p id="draftLabel" style="font-size:12px;color:var(--mu);margin-bottom:12px"></p>
+    <div id="draftErr" class="err-msg"></div>
+    <div class="shift-picker" id="draftShiftPicker"></div>
+    <div class="fg"><label>Reason (optional)</label>
+      <textarea id="draftReason" placeholder="Why are you requesting this change?"></textarea></div>
+    <button class="btn bp" style="width:100%" onclick="submitDraft()">📤 Submit Proposal</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────
+// GLOBALS
+// ─────────────────────────────────────────────
+var ME = {{ user.to_dict()|tojson }};
+var SHIFTS = {{ shifts|tojson }};
+var MONTHS = {{ months|tojson }};
+var LEAVE_TYPES = {{ leave_types|tojson }};
+var IS_ADMIN = ME.role === 'admin';
+var CY = new Date().getFullYear();
+var CM = new Date().getMonth() + 1;
+var reqStatusFilter = 'all';
+var reqTypeFilter   = 'all';
+var shiftEdit = null; // {user_id, year, month, day}
+var draftEdit = null; // {date, cur_shift}
+var draftSelShift = null;
+var shiftSelCode  = null;
+var SCHEDULE_DATA  = null;
+var ALL_USERS      = [];
+
+// ─────────────────────────────────────────────
+// NAV
+// ─────────────────────────────────────────────
+var ADMIN_NAV = [
+  {id:'dashboard',  ico:'🏠', lbl:'Dashboard'},
+  {id:'employees',  ico:'👥', lbl:'Employees'},
+  {id:'schedule',   ico:'📅', lbl:'Schedule'},
+  {id:'requests',   ico:'📋', lbl:'Requests', badge:'pending'},
+  {id:'settings',   ico:'⚙️', lbl:'Settings'},
+];
+var EMP_NAV = [
+  {id:'my-schedule',   ico:'📅', lbl:'My Schedule'},
+  {id:'team',          ico:'👥', lbl:'Team Schedule'},
+  {id:'leave',         ico:'✈️', lbl:'Leave Request'},
+  {id:'swap',          ico:'🔄', lbl:'Swap Request'},
+  {id:'draft',         ico:'✏️', lbl:'Draft Schedule'},
+  {id:'notifications', ico:'🔔', lbl:'Notifications', badge:'unread'},
+  {id:'profile',       ico:'👤', lbl:'My Profile'},
+  {id:'password',      ico:'🔑', lbl:'Change Password'},
+];
+
+var PAGE_INFO = {
+  'dashboard':     ['Dashboard',        'Team overview and pending requests'],
+  'employees':     ['Employees',        'Add, edit and manage staff'],
+  'schedule':      ['Schedule Editor',  'Click any cell to change a shift'],
+  'requests':      ['All Requests',     'Review and manage all requests'],
+  'settings':      ['Settings',         'Email and shift configuration'],
+  'my-schedule':   ['My Schedule',      'Your personal shift calendar'],
+  'team':          ['Team Schedule',    'All colleagues — read only'],
+  'leave':         ['Leave Request',    'Request annual, sick, or personal leave'],
+  'swap':          ['Swap Request',     'Request a shift swap with a colleague'],
+  'draft':         ['Draft Schedule',   'Propose shift changes for manager review'],
+  'notifications': ['Notifications',    'Updates and decisions from your manager'],
+  'profile':       ['My Profile',       'Your personal information'],
+  'password':      ['Change Password',  'Update your account password'],
+};
+
+var pendingCount = 0;
+var unreadCount  = 0;
+
+function buildNav(pending, unread){
+  pendingCount = pending || 0;
+  unreadCount  = unread  || 0;
+  var items = IS_ADMIN ? ADMIN_NAV : EMP_NAV;
+  var cur   = document.querySelector('.ni.on');
+  var curId = cur ? cur.dataset.id : '';
+  var h = '';
+  items.forEach(function(it){
+    var badge = '';
+    if(it.badge === 'pending' && pendingCount > 0)
+      badge = '<span class="nbadge">'+pendingCount+'</span>';
+    if(it.badge === 'unread' && unreadCount > 0)
+      badge = '<span class="nbadge">'+unreadCount+'</span>';
+    h += '<div class="ni'+(curId===it.id?' on':'')+'" data-id="'+it.id+'" onclick="navTo(\''+it.id+'\')">'
+      + '<span class="nio">'+it.ico+'</span><span style="flex:1">'+it.lbl+'</span>'+badge+'</div>';
+  });
+  document.getElementById('navList').innerHTML = h;
+}
+
+function navTo(id){
+  document.querySelectorAll('.view').forEach(function(v){v.classList.remove('on');});
+  document.querySelectorAll('.ni').forEach(function(n){n.classList.remove('on');});
+  var v = document.getElementById('v-'+id);
+  var n = document.querySelector('.ni[data-id="'+id+'"]');
+  if(v) v.classList.add('on');
+  if(n) n.classList.add('on');
+  var info = PAGE_INFO[id] || [id,''];
+  document.getElementById('pgTitle').textContent  = info[0];
+  document.getElementById('pgSub').textContent    = info[1];
+  document.getElementById('mobTitle').textContent = info[0];
+  // load content
+  switch(id){
+    case 'dashboard':    loadDashboard();   break;
+    case 'employees':    loadEmployees();   break;
+    case 'schedule':     loadSchedule();    break;
+    case 'requests':     loadRequests();    break;
+    case 'settings':     loadSettings();    break;
+    case 'my-schedule':  loadMySchedule();  break;
+    case 'team':         loadTeam();        break;
+    case 'leave':        loadMyLeave();     break;
+    case 'swap':         loadMySwap();      break;
+    case 'draft':        loadDraft();       break;
+    case 'notifications':loadNotifs();      break;
+    case 'profile':      loadProfile();     break;
+  }
+  closeSB();
+}
+
+// ─────────────────────────────────────────────
+// UTILS
+// ─────────────────────────────────────────────
+function api(method, url, data){
+  return fetch(url, {
+    method: method,
+    headers: {'Content-Type':'application/json'},
+    body: data ? JSON.stringify(data) : undefined
+  }).then(function(r){ return r.json(); });
+}
+function toast(msg, type){
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = 'toast show' + (type ? ' '+type : '');
+  setTimeout(function(){ t.className='toast'; }, 3000);
+}
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function toggleSB(){
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sbOv').classList.toggle('show');
+}
+function closeSB(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sbOv').classList.remove('show');
+}
+function fmtDate(d){ return d ? new Date(d+'T00:00:00').toLocaleDateString('en-GB') : '—'; }
+function monthName(y, m){ return MONTHS[m-1]+' '+y; }
+function changeMonth(delta){
+  CM += delta;
+  if(CM < 1){ CM = 12; CY--; }
+  if(CM > 12){ CM = 1; CY++; }
+  var cur = document.querySelector('.ni.on');
+  if(cur) navTo(cur.dataset.id);
+}
+
+function shiftBadge(code){
+  var s = SHIFTS[code];
+  if(!s) return '<span class="bdg" style="background:#f7fafc;color:#a0aec0">'+code+'</span>';
+  return '<span class="bdg" style="background:'+s.bg+';color:'+s.color+'">'+s.icon+' '+code+'</span>';
+}
+function shiftLabel(code){
+  var s = SHIFTS[code];
+  return s ? (s.icon+' '+s.name) : code;
+}
+function buildLegend(elId){
+  var h = '';
+  Object.keys(SHIFTS).forEach(function(k){
+    var s = SHIFTS[k];
+    h += '<div class="leg-item"><div class="leg-dot" style="background:'+s.bg+';border:1px solid '+s.color+'"></div>'
+      + '<span>'+s.icon+' '+k+' — '+s.name+'</span></div>';
+  });
+  document.getElementById(elId).innerHTML = h;
+}
+function statusBadge(st){
+  var c = {pending:'stpending', approved:'stapproved', rejected:'strejected'}[st] || '';
+  var ico = {pending:'⏳', approved:'✅', rejected:'❌'}[st] || '';
+  return '<span class="stb '+c+'">'+ico+' '+st+'</span>';
+}
+
+function reqCard(r, isAdmin){
+  var user = r.user_name || 'Unknown';
+  var ico  = r.user_initials || '?';
+  var col  = r.user_color || '#888';
+  var info = '';
+  if(r.type === 'leave'){
+    info = '<b>'+LEAVE_TYPES[r.leave_type]+'</b> &nbsp;'+fmtDate(r.start_date)+' → '+fmtDate(r.end_date)+' &nbsp;('+r.days_count+' days)';
+  } else if(r.type === 'swap'){
+    info = '<b>Swap</b> with '+r.target_user_name+' on '+fmtDate(r.swap_date)
+      + '<br>'+shiftBadge(r.user_shift)+' ⇄ '+shiftBadge(r.target_shift);
+  } else if(r.type === 'draft'){
+    info = '<b>Schedule Proposal</b> on '+fmtDate(r.draft_date)
+      + ' &nbsp;'+shiftBadge(r.current_shift_code)+' → '+shiftBadge(r.proposed_shift);
+  }
+  var acts = '';
+  if(isAdmin && r.status === 'pending'){
+    acts = '<div style="display:flex;gap:6px;margin-top:9px">'
+      + '<button class="btn bsuc bsm" onclick="openAction('+r.id+')">Review</button></div>';
+  }
+  return '<div class="rc '+r.status+'">'
+    + '<div class="rh"><div style="display:flex;gap:8px;align-items:center">'
+    + '<div class="ea" style="background:'+col+';width:28px;height:28px;font-size:10px">'+ico+'</div>'
+    + '<div><div style="font-weight:600;font-size:13px">'+user+'</div>'
+    + '<div style="font-size:10px;color:var(--mu)">'+r.created_at+'</div></div></div>'
+    + statusBadge(r.status)+'</div>'
+    + '<div style="font-size:12px;margin:5px 0">'+info+'</div>'
+    + (r.reason?'<div style="font-size:11px;color:var(--mu);font-style:italic">"'+r.reason+'"</div>':'')
+    + (r.admin_note?'<div style="font-size:11px;margin-top:4px;padding:4px 8px;background:#f7fafc;border-radius:5px">📝 '+r.admin_note+'</div>':'')
+    + acts + '</div>';
+}
+
+// ─────────────────────────────────────────────
+// DASHBOARD (admin)
+// ─────────────────────────────────────────────
+function loadDashboard(){
+  api('GET','/api/stats').then(function(d){
+    document.getElementById('statsGrid').innerHTML =
+      stat('👥','#e0f7f7',d.total,'Employees') +
+      stat('⏳','#fef9c3',d.pending,'Pending') +
+      stat('✅','#c6f6d5',d.approved,'Approved') +
+      stat('❌','#fed7d7',d.rejected,'Rejected');
+    var pl = document.getElementById('pendingList');
+    pl.innerHTML = d.recent.length
+      ? d.recent.map(function(r){return reqCard(r, true);}).join('')
+      : '<div style="text-align:center;padding:20px;color:var(--mu)">✅ No pending requests</div>';
+    api('GET','/api/requests?status=pending').then(function(reqs){
+      buildNav(reqs.length, unreadCount);
+    });
+  });
+}
+function stat(ico,bg,val,lbl){
+  return '<div class="sc"><div class="si" style="background:'+bg+'">'+ico+'</div>'
+    + '<div class="sv">'+val+'</div><div class="sl">'+lbl+'</div></div>';
+}
+
+// ─────────────────────────────────────────────
+// EMPLOYEES (admin)
+// ─────────────────────────────────────────────
+function loadEmployees(){
+  api('GET','/api/users').then(function(users){
+    ALL_USERS = users;
+    var emps = users.filter(function(u){return u.role==='employee';});
+    api('GET','/api/requests?status=pending').then(function(reqs){
+      var pcount = {};
+      reqs.forEach(function(r){pcount[r.user_id]=(pcount[r.user_id]||0)+1;});
+      document.getElementById('empBody').innerHTML = emps.map(function(u){
+        return '<tr>'
+          + '<td><div style="display:flex;align-items:center;gap:7px">'
+          + '<div class="ea" style="background:'+u.color+'">'+u.initials+'</div>'
+          + '<b>'+u.name+'</b></div></td>'
+          + '<td><code>'+u.username+'</code></td>'
+          + '<td>'+( u.email||'—')+'</td>'
+          + '<td>'+(u.department||'—')+'</td>'
+          + '<td>'+u.vac_days+' days</td>'
+          + '<td>'+u.sick_days+' days</td>'
+          + '<td>'+(pcount[u.id]?'<span class="stb stpending">'+pcount[u.id]+'</span>':'—')+'</td>'
+          + '<td><div style="display:flex;gap:5px;flex-wrap:wrap">'
+          + '<button class="btn bgr bsm" onclick="openEdit('+u.id+')">✏️ Edit</button>'
+          + '<button class="btn bgr bsm" onclick="openSetPw('+u.id+')">🔑 Password</button>'
+          + '<button class="btn bdan bsm" onclick="deleteEmp('+u.id+',\''+u.name+'\')">🗑️</button>'
+          + '</div></td></tr>';
+      }).join('');
+    });
+  });
+}
+function openEdit(uid){
+  var u = ALL_USERS.find(function(x){return x.id===uid;});
+  if(!u) return;
+  document.getElementById('editEmpId').value    = uid;
+  document.getElementById('editName').value     = u.name;
+  document.getElementById('editEmail').value    = u.email||'';
+  document.getElementById('editDept').value     = u.department||'';
+  document.getElementById('editLoc').value      = u.location||'';
+  document.getElementById('editOffice').value   = u.office||'';
+  document.getElementById('editPhone').value    = u.phone||'';
+  document.getElementById('editVac').value      = u.vac_days;
+  document.getElementById('editSick').value     = u.sick_days;
+  openModal('mEditEmp');
+}
+function saveEmployee(){
+  var uid = document.getElementById('editEmpId').value;
+  api('PUT','/api/users/'+uid, {
+    name:      document.getElementById('editName').value,
+    email:     document.getElementById('editEmail').value,
+    department:document.getElementById('editDept').value,
+    location:  document.getElementById('editLoc').value,
+    office:    document.getElementById('editOffice').value,
+    phone:     document.getElementById('editPhone').value,
+    vac_days:  document.getElementById('editVac').value,
+    sick_days: document.getElementById('editSick').value,
+  }).then(function(r){
+    if(r.ok){ closeModal('mEditEmp'); loadEmployees(); toast('Employee updated!','ok'); }
+    else toast(r.error||'Error','err');
+  });
+}
+function addEmployee(){
+  var e = document.getElementById('addEmpErr');
+  e.style.display='none';
+  var pw = document.getElementById('addPass').value;
+  if(!document.getElementById('addName').value || !document.getElementById('addUsername').value){
+    e.textContent='Name and username are required'; e.style.display='block'; return;
+  }
+  if(!pw || pw.length < 4){ e.textContent='Password must be at least 4 characters'; e.style.display='block'; return; }
+  api('POST','/api/users',{
+    name:       document.getElementById('addName').value,
+    username:   document.getElementById('addUsername').value,
+    password:   pw,
+    email:      document.getElementById('addEmail').value,
+    department: document.getElementById('addDept').value,
+    location:   document.getElementById('addLoc').value,
+    office:     document.getElementById('addOffice').value,
+    phone:      document.getElementById('addPhone').value,
+    vac_days:   document.getElementById('addVac').value,
+    sick_days:  document.getElementById('addSick').value,
+  }).then(function(r){
+    if(r.ok){ closeModal('mAddEmp'); loadEmployees(); toast('Employee added!','ok');
+      ['addName','addUsername','addPass','addEmail','addDept','addLoc','addOffice','addPhone']
+        .forEach(function(id){document.getElementById(id).value='';});
+      document.getElementById('addVac').value='21';
+      document.getElementById('addSick').value='14';
+    } else { e.textContent=r.error||'Error'; e.style.display='block'; }
+  });
+}
+function openSetPw(uid){
+  document.getElementById('setPwUid').value=uid;
+  document.getElementById('setPwVal').value='';
+  document.getElementById('setPwCon').value='';
+  document.getElementById('setPwErr').style.display='none';
+  openModal('mSetPw');
+}
+function setPassword(){
+  var e   = document.getElementById('setPwErr');
+  var pw  = document.getElementById('setPwVal').value;
+  var con = document.getElementById('setPwCon').value;
+  e.style.display='none';
+  if(pw.length < 4){ e.textContent='Min 4 characters'; e.style.display='block'; return; }
+  if(pw !== con){ e.textContent='Passwords do not match'; e.style.display='block'; return; }
+  api('POST','/api/users/'+document.getElementById('setPwUid').value+'/password',{password:pw})
+    .then(function(r){
+      if(r.ok){ closeModal('mSetPw'); toast('Password updated!','ok'); }
+      else{ e.textContent=r.error||'Error'; e.style.display='block'; }
+    });
+}
+function deleteEmp(uid, name){
+  if(!confirm('Delete employee "'+name+'"? This cannot be undone.')) return;
+  api('DELETE','/api/users/'+uid).then(function(r){
+    if(r.ok){ loadEmployees(); toast('Employee deleted.'); }
+    else toast(r.error||'Error','err');
+  });
+}
+
+// ─────────────────────────────────────────────
+// SCHEDULE (admin)
+// ─────────────────────────────────────────────
+function loadSchedule(){
+  document.getElementById('adMonthLabel').textContent = monthName(CY, CM);
+  buildLegend('schLeg');
+  api('GET','/api/schedule/'+CY+'/'+CM).then(function(d){
+    SCHEDULE_DATA = d;
+    var days = d.days;
+    var today = d.today;
+    // header
+    var h = '<tr><th class="emp-cell">Employee</th>';
+    for(var i=1;i<=days;i++){
+      var dt = new Date(CY, CM-1, i);
+      var dw = ['Su','Mo','Tu','We','Th','Fr','Sa'][dt.getDay()];
+      h += '<th style="'+(i===today?'background:var(--tl);color:var(--td)':'')+'">'+i+'<br><span style="opacity:.6;font-size:8px">'+dw+'</span></th>';
+    }
+    h += '</tr>';
+    document.getElementById('schHead').innerHTML = h;
+    // body
+    var b = '';
+    d.employees.forEach(function(row){
+      var u = row.user;
+      b += '<tr><td class="emp-cell"><div style="display:flex;align-items:center;gap:6px">'
+        + '<div class="ea" style="background:'+u.color+';width:24px;height:24px;font-size:9px">'+u.initials+'</div>'
+        + '<div><div style="font-size:11px;font-weight:600">'+u.name+'</div>'
+        + '<div style="font-size:9px;color:var(--mu)">'+(u.department||'')+'</div></div></div></td>';
+      for(var i=1;i<=days;i++){
+        var code = row.shifts[String(i)] || 'DOF';
+        var s    = SHIFTS[code] || {bg:'#f7fafc',color:'#718096',icon:'',name:code};
+        var isTod = i===today;
+        b += '<td class="ce'+(isTod?' tc':'')+'" onclick="openShiftEdit('+u.id+','+i+')">'
+          + '<span style="background:'+s.bg+';color:'+s.color+';padding:2px 4px;border-radius:4px;'
+          + 'font-size:9px;font-weight:700;font-family:monospace">'+s.icon+' '+code+'</span></td>';
+      }
+      b += '</tr>';
+    });
+    document.getElementById('schBody').innerHTML = b;
+  });
+}
+function openShiftEdit(uid, day){
+  shiftEdit = {user_id: uid, year: CY, month: CM, day: day};
+  shiftSelCode = null;
+  var emp = SCHEDULE_DATA && SCHEDULE_DATA.employees.find(function(e){return e.user.id===uid;});
+  var cur = emp ? (emp.shifts[String(day)] || 'DOF') : 'DOF';
+  var dw = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(CY,CM-1,day).getDay()];
+  var uname = emp ? emp.user.name : 'Employee';
+  document.getElementById('shiftLabel').textContent = uname+' — '+dw+', '+day+' '+MONTHS[CM-1]+' '+CY+' (Current: '+cur+')';
+  var h = '';
+  Object.keys(SHIFTS).forEach(function(k){
+    var s = SHIFTS[k];
+    h += '<div class="sp-opt'+(k===cur?' sel':'')+'" id="spo-'+k+'" onclick="selShift(\''+k+'\')" '
+      + 'style="background:'+s.bg+';color:'+s.color+'">'+s.icon+' '+k+' — '+s.name+'</div>';
+  });
+  document.getElementById('shiftPicker').innerHTML = h;
+  if(cur) shiftSelCode = cur;
+  openModal('mShift');
+}
+function selShift(code){
+  shiftSelCode = code;
+  document.querySelectorAll('.sp-opt').forEach(function(e){e.classList.remove('sel');});
+  var el = document.getElementById('spo-'+code);
+  if(el) el.classList.add('sel');
+}
+function saveShift(){
+  if(!shiftEdit || !shiftSelCode) return;
+  api('POST','/api/schedule',{
+    user_id:shiftEdit.user_id, year:shiftEdit.year, month:shiftEdit.month,
+    day:shiftEdit.day, shift_code:shiftSelCode
+  }).then(function(r){
+    if(r.ok){ closeModal('mShift'); loadSchedule(); toast('Shift updated!','ok'); }
+    else toast(r.error||'Error','err');
+  });
+}
+
+// ─────────────────────────────────────────────
+// REQUESTS (admin)
+// ─────────────────────────────────────────────
+function loadRequests(){
+  api('GET','/api/requests?status='+reqStatusFilter+'&type='+reqTypeFilter)
+    .then(function(reqs){
+      var el = document.getElementById('reqList');
+      el.innerHTML = reqs.length
+        ? reqs.map(function(r){return reqCard(r,true);}).join('')
+        : '<div style="text-align:center;padding:24px;color:var(--mu)">No requests found.</div>';
+    });
+}
+function setReqFilter(f, el){
+  reqStatusFilter = f;
+  document.querySelectorAll('#v-requests .tabs:first-child .tab').forEach(function(t){t.classList.remove('on');});
+  if(el) el.classList.add('on');
+  loadRequests();
+}
+function setTypeFilter(f, el){
+  reqTypeFilter = f;
+  document.querySelectorAll('#v-requests .tabs:nth-child(2) .tab').forEach(function(t){t.classList.remove('on');});
+  if(el) el.classList.add('on');
+  loadRequests();
+}
+function openAction(rid){
+  api('GET','/api/requests?status=all').then(function(reqs){
+    var r = reqs.find(function(x){return x.id===rid;});
+    if(!r) return;
+    document.getElementById('actionRid').value = rid;
+    document.getElementById('actionTitle').textContent = 'Review — '+r.user_name;
+    document.getElementById('actionNote').value = '';
+    var info = reqCard(r, false);
+    document.getElementById('actionDetail').innerHTML = info;
+    openModal('mAction');
+  });
+}
+function doAction(action){
+  var rid  = document.getElementById('actionRid').value;
+  var note = document.getElementById('actionNote').value;
+  api('POST','/api/requests/'+rid+'/'+action, {note: note}).then(function(r){
+    if(r.ok){
+      closeModal('mAction');
+      loadRequests();
+      loadDashboard();
+      toast(action==='approve'?'✅ Request approved!':'Request rejected.',action==='approve'?'ok':'');
+    } else toast(r.error||'Error','err');
+  });
+}
+
+// ─────────────────────────────────────────────
+// SETTINGS (admin)
+// ─────────────────────────────────────────────
+function loadSettings(){
+  api('GET','/api/settings').then(function(d){
+    document.getElementById('setEmailEnabled').value = d.email_enabled;
+    document.getElementById('setSmtpServer').value   = d.smtp_server;
+    document.getElementById('setSmtpPort').value     = d.smtp_port;
+    document.getElementById('setSmtpUser').value     = d.smtp_user;
+    document.getElementById('setSmtpPass').value     = d.smtp_pass;
+    document.getElementById('setFromName').value     = d.from_name;
+    document.getElementById('setDayHours').value     = d.day_hours;
+    document.getElementById('setNightHours').value   = d.night_hours;
+  });
+}
+function saveSettings(){
+  api('POST','/api/settings',{
+    email_enabled: document.getElementById('setEmailEnabled').value,
+    smtp_server:   document.getElementById('setSmtpServer').value,
+    smtp_port:     document.getElementById('setSmtpPort').value,
+    smtp_user:     document.getElementById('setSmtpUser').value,
+    smtp_pass:     document.getElementById('setSmtpPass').value,
+    from_name:     document.getElementById('setFromName').value,
+    day_hours:     document.getElementById('setDayHours').value,
+    night_hours:   document.getElementById('setNightHours').value,
+  }).then(function(r){
+    if(r.ok) toast('Settings saved!','ok'); else toast(r.error,'err');
+  });
+}
+function testEmail(){
+  api('POST','/api/settings/test-email',{}).then(function(r){
+    if(r.ok) toast('Test email sent! Check inbox.','ok');
+    else toast(r.error||'Failed','err');
+  });
+}
+
+// ─────────────────────────────────────────────
+// MY SCHEDULE (employee)
+// ─────────────────────────────────────────────
+function loadMySchedule(){
+  document.getElementById('empMonthLabel').textContent = monthName(CY, CM);
+  buildLegend('empLeg');
+  api('GET','/api/schedule/'+CY+'/'+CM).then(function(d){
+    var me = d.employees.find(function(e){return e.user.id===ME.id;});
+    if(!me) return;
+    // stats
+    var ooCnt = Object.values(me.shifts).filter(function(s){return s==='OO';}).length;
+    var blCnt = Object.values(me.shifts).filter(function(s){return s==='BL';}).length;
+    document.getElementById('empStats').innerHTML =
+      '<div class="sc" style="padding:10px 14px;flex-direction:row;gap:8px">'
+      + '<div class="si" style="background:#bee3f8;width:32px;height:32px;font-size:16px">✈️</div>'
+      + '<div><div class="sv" style="font-size:18px">'+Math.max(0,me.user.vac_days-ooCnt)+'</div>'
+      + '<div class="sl">Annual Left</div></div></div>'
+      + '<div class="sc" style="padding:10px 14px;flex-direction:row;gap:8px">'
+      + '<div class="si" style="background:#fed7d7;width:32px;height:32px;font-size:16px">🤒</div>'
+      + '<div><div class="sv" style="font-size:18px">'+Math.max(0,me.user.sick_days-blCnt)+'</div>'
+      + '<div class="sl">Sick Left</div></div></div>';
+    renderCalendar('empCal', d, me, false, null);
+  });
+}
+
+// ─────────────────────────────────────────────
+// TEAM SCHEDULE (employee)
+// ─────────────────────────────────────────────
+function loadTeam(){
+  document.getElementById('teamMonthLabel').textContent = monthName(CY, CM);
+  buildLegend('teamLeg');
+  api('GET','/api/schedule/'+CY+'/'+CM).then(function(d){
+    var days = d.days;
+    var today = d.today;
+    var h = '<tr><th class="emp-cell">Employee</th>';
+    for(var i=1;i<=days;i++){
+      var dt = new Date(CY, CM-1, i);
+      var dw = ['Su','Mo','Tu','We','Th','Fr','Sa'][dt.getDay()];
+      h += '<th style="'+(i===today?'background:var(--tl);color:var(--td)':'')+'">'+i
+        + '<br><span style="opacity:.6;font-size:8px">'+dw+'</span></th>';
+    }
+    h += '</tr>';
+    document.getElementById('teamHead').innerHTML = h;
+    var b = '';
+    d.employees.forEach(function(row){
+      var u = row.user;
+      b += '<tr><td class="emp-cell"><div style="display:flex;align-items:center;gap:6px">'
+        + '<div class="ea" style="background:'+u.color+';width:24px;height:24px;font-size:9px">'+u.initials+'</div>'
+        + '<div style="font-size:11px;font-weight:600">'+u.name+'</div></div></td>';
+      for(var i=1;i<=days;i++){
+        var code = row.shifts[String(i)] || 'DOF';
+        var s = SHIFTS[code] || {bg:'#f7fafc',color:'#718096',icon:'',name:code};
+        var isTod = i===today;
+        b += '<td style="'+(isTod?'background:var(--tl)':'')+'"><span style="background:'+s.bg+';color:'+s.color
+          + ';padding:2px 4px;border-radius:4px;font-size:9px;font-weight:700;font-family:monospace">'
+          + s.icon+' '+code+'</span></td>';
+      }
+      b += '</tr>';
+    });
+    document.getElementById('teamBody').innerHTML = b;
+  });
+}
+
+// ─────────────────────────────────────────────
+// CALENDAR RENDERER (used by my-schedule and draft)
+// ─────────────────────────────────────────────
+function renderCalendar(elId, data, myRow, clickable, draftReqs){
+  var days = data.days;
+  var first = new Date(CY, CM-1, 1).getDay(); // Sunday=0
+  var today = data.today;
+  var h = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+    .map(function(d){return '<div class="ch">'+d+'</div>';}).join('');
+  for(var i=0;i<first;i++) h += '<div class="cd empty"></div>';
+  for(var d=1;d<=days;d++){
+    var code = myRow.shifts[String(d)] || 'DOF';
+    var s    = SHIFTS[code];
+    var ds   = '';
+    if(s) ds = '<div class="ds" style="background:'+s.bg+';color:'+s.color+'">'
+      + s.icon+' '+code+'</div>';
+    var pend = draftReqs && draftReqs.some(function(r){
+      return r.draft_date === padDate(CY,CM,d) && r.status==='pending';
+    });
+    var classes = 'cd' + (d===today?' today':'') + (pend?' has-pending':'');
+    var click = clickable ? ' onclick="openDraftDay('+d+')"' : '';
+    h += '<div class="'+classes+'"'+click+'>'
+      + '<div class="dn">'+d+'</div>'+ds
+      + (pend?'<div style="font-size:7px;background:#fef3c7;color:#744210;border-radius:3px;padding:1px 2px;font-weight:700;margin-top:2px">⏳</div>':'')
+      + '</div>';
+  }
+  document.getElementById(elId).innerHTML = h;
+}
+function padDate(y,m,d){
+  return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+}
+
+// ─────────────────────────────────────────────
+// LEAVE (employee)
+// ─────────────────────────────────────────────
+function loadMyLeave(){
+  api('GET','/api/requests?type=leave').then(function(reqs){
+    var el = document.getElementById('myLeaveList');
+    el.innerHTML = reqs.length
+      ? reqs.map(function(r){return reqCard(r,false);}).join('')
+      : '<div style="text-align:center;padding:20px;color:var(--mu)">No leave requests yet.</div>';
+  });
+}
+function submitLeave(){
+  var e  = document.getElementById('leaveErr');
+  var sd = document.getElementById('leaveStart').value;
+  var ed = document.getElementById('leaveEnd').value;
+  e.style.display='none';
+  if(!sd||!ed){ e.textContent='Please select start and end dates'; e.style.display='block'; return; }
+  if(sd>ed){ e.textContent='End date must be after start date'; e.style.display='block'; return; }
+  api('POST','/api/requests/leave',{
+    leave_type: document.getElementById('leaveType').value,
+    start_date: sd, end_date: ed,
+    reason: document.getElementById('leaveReason').value
+  }).then(function(r){
+    if(r.ok){
+      toast('✅ Leave request submitted!','ok');
+      document.getElementById('leaveStart').value='';
+      document.getElementById('leaveEnd').value='';
+      document.getElementById('leaveReason').value='';
+      loadMyLeave();
+    } else { e.textContent=r.error||'Error'; e.style.display='block'; }
+  });
+}
+
+// ─────────────────────────────────────────────
+// SWAP (employee)
+// ─────────────────────────────────────────────
+var swapSchedData = null;
+function loadMySwap(){
+  api('GET','/api/users').then(function(users){
+    ALL_USERS = users;
+    var sel = document.getElementById('swapTarget');
+    sel.innerHTML = users.filter(function(u){return u.id!==ME.id&&u.role==='employee';})
+      .map(function(u){return '<option value="'+u.id+'">'+u.name+'</option>';}).join('');
+  });
+  api('GET','/api/requests?type=swap').then(function(reqs){
+    var el = document.getElementById('mySwapList');
+    el.innerHTML = reqs.length
+      ? reqs.map(function(r){return reqCard(r,false);}).join('')
+      : '<div style="text-align:center;padding:20px;color:var(--mu)">No swap requests yet.</div>';
+  });
+}
+function loadSwapInfo(){
+  var d = document.getElementById('swapDate').value;
+  if(!d){ document.getElementById('swapInfo').style.display='none'; return; }
+  var dt = new Date(d+'T00:00:00');
+  api('GET','/api/schedule/'+dt.getFullYear()+'/'+(dt.getMonth()+1)).then(function(data){
+    swapSchedData = data;
+    var me  = data.employees.find(function(e){return e.user.id===ME.id;});
+    var day = dt.getDate();
+    var myShift  = me ? (me.shifts[String(day)]||'DOF') : 'DOF';
+    var tid = parseInt(document.getElementById('swapTarget').value);
+    var them = data.employees.find(function(e){return e.user.id===tid;});
+    var theirShift = them ? (them.shifts[String(day)]||'DOF') : 'DOF';
+    var el = document.getElementById('swapInfo');
+    el.style.display = 'block';
+    el.innerHTML = 'Your shift: '+shiftBadge(myShift)+' &nbsp;↔&nbsp; Their shift: '+shiftBadge(theirShift);
+  });
+}
+function submitSwap(){
+  var e   = document.getElementById('swapErr');
+  var tid = document.getElementById('swapTarget').value;
+  var dt  = document.getElementById('swapDate').value;
+  e.style.display='none';
+  if(!dt){ e.textContent='Please select a date'; e.style.display='block'; return; }
+  if(!tid){ e.textContent='Please select a colleague'; e.style.display='block'; return; }
+  api('POST','/api/requests/swap',{
+    target_user_id: parseInt(tid),
+    swap_date: dt,
+    reason: document.getElementById('swapReason').value
+  }).then(function(r){
+    if(r.ok){
+      toast('✅ Swap request submitted!','ok');
+      document.getElementById('swapDate').value='';
+      document.getElementById('swapReason').value='';
+      document.getElementById('swapInfo').style.display='none';
+      loadMySwap();
+    } else { e.textContent=r.error||'Error'; e.style.display='block'; }
+  });
+}
+
+// ─────────────────────────────────────────────
+// DRAFT (employee)
+// ─────────────────────────────────────────────
+var draftSchedData = null;
+var draftDayReqs   = [];
+function loadDraft(){
+  document.getElementById('draftMonthLabel').textContent = monthName(CY, CM);
+  buildLegend('draftLeg');
+  Promise.all([
+    api('GET','/api/schedule/'+CY+'/'+CM),
+    api('GET','/api/requests?type=draft')
+  ]).then(function(results){
+    draftSchedData = results[0];
+    draftDayReqs   = results[1];
+    var me = draftSchedData.employees.find(function(e){return e.user.id===ME.id;});
+    if(me) renderCalendar('draftCal', draftSchedData, me, true, draftDayReqs);
+    var el = document.getElementById('myDraftList');
+    var myReqs = draftDayReqs.slice().reverse();
+    el.innerHTML = myReqs.length
+      ? myReqs.map(function(r){return reqCard(r,false);}).join('')
+      : '<div style="text-align:center;padding:20px;color:var(--mu)">No proposals yet. Click any day to propose.</div>';
+  });
+}
+function openDraftDay(day){
+  if(!draftSchedData) return;
+  var me  = draftSchedData.employees.find(function(e){return e.user.id===ME.id;});
+  var cur = me ? (me.shifts[String(day)]||'DOF') : 'DOF';
+  var ds  = padDate(CY, CM, day);
+  draftEdit     = {date: ds, cur: cur};
+  draftSelShift = null;
+  var dw = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(CY,CM-1,day).getDay()];
+  document.getElementById('draftLabel').textContent =
+    dw+', '+day+' '+MONTHS[CM-1]+' '+CY+' — Current shift: '+cur;
+  document.getElementById('draftErr').style.display='none';
+  document.getElementById('draftReason').value='';
+  var h = '';
+  Object.keys(SHIFTS).forEach(function(k){
+    var s = SHIFTS[k];
+    h += '<div class="sp-opt'+(k===cur?' sel':'')+'" id="dpo-'+k+'" onclick="selDraft(\''+k+'\')" '
+      + 'style="background:'+s.bg+';color:'+s.color+'">'+s.icon+' '+k+' — '+s.name+'</div>';
+  });
+  document.getElementById('draftShiftPicker').innerHTML = h;
+  draftSelShift = cur;
+  openModal('mDraft');
+}
+function selDraft(code){
+  draftSelShift = code;
+  document.querySelectorAll('.sp-opt[id^="dpo-"]').forEach(function(e){e.classList.remove('sel');});
+  var el = document.getElementById('dpo-'+code);
+  if(el) el.classList.add('sel');
+}
+function submitDraft(){
+  var e = document.getElementById('draftErr');
+  e.style.display='none';
+  if(!draftSelShift){ e.textContent='Please select a shift'; e.style.display='block'; return; }
+  if(!draftEdit) return;
+  api('POST','/api/requests/draft',{
+    draft_date:     draftEdit.date,
+    proposed_shift: draftSelShift,
+    reason:         document.getElementById('draftReason').value
+  }).then(function(r){
+    if(r.ok){
+      closeModal('mDraft'); loadDraft();
+      toast('✅ Proposal submitted — awaiting approval.','ok');
+    } else { e.textContent=r.error||'Error'; e.style.display='block'; }
+  });
+}
+
+// ─────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────
+function loadNotifs(){
+  api('GET','/api/notifications').then(function(d){
+    // mark as read
+    if(d.unread > 0){
+      api('POST','/api/notifications/read',{}).then(function(){
+        buildNav(pendingCount, 0);
+      });
+    }
+    var el = document.getElementById('notifList');
+    if(!d.notifications.length){
+      el.innerHTML='<div style="text-align:center;padding:24px;color:var(--mu)">🔔 No notifications yet.<br><small>You will be notified when your manager approves or rejects a request.</small></div>';
+      return;
+    }
+    el.innerHTML = d.notifications.map(function(n){
+      var ico = n.type==='approved'?'✅':n.type==='rejected'?'❌':'ℹ️';
+      var bg  = n.type==='approved'?'#f0fff4':n.type==='rejected'?'#fff5f5':'#ebf8ff';
+      var bc  = n.type==='approved'?'#9ae6b4':n.type==='rejected'?'#fed7d7':'#bee3f8';
+      return '<div style="padding:12px 14px;border-radius:10px;margin-bottom:9px;background:'+bg
+        + ';border:1px solid '+bc+(n.is_read?'':';border-left:3px solid #3182ce')+'"><div style="font-weight:600;font-size:13px;margin-bottom:4px">'
+        + ico+' '+n.message+'</div><div style="font-size:10px;color:var(--mu)">'+n.created_at+'</div></div>';
+    }).join('');
+  });
+}
+function markAllRead(){
+  api('POST','/api/notifications/read',{}).then(function(){
+    buildNav(pendingCount, 0);
+    loadNotifs();
+    toast('All notifications marked as read.','ok');
+  });
+}
+
+// ─────────────────────────────────────────────
+// PROFILE
+// ─────────────────────────────────────────────
+function loadProfile(){
+  document.getElementById('profileCard').innerHTML =
+    '<div class="ct"><div class="ct-l">👤 My Profile</div></div>'
+    + '<div style="display:flex;align-items:center;gap:16px;margin-bottom:18px">'
+    + '<div class="av" style="width:56px;height:56px;font-size:20px;background:'+ME.color+'">'+ME.initials+'</div>'
+    + '<div><div style="font-size:18px;font-weight:700">'+ME.name+'</div>'
+    + '<div style="font-size:12px;color:var(--mu)">@'+ME.username+'</div></div></div>'
+    + '<table class="et"><tbody>'
+    + row('Email', ME.email||'—') + row('Department', ME.department||'—')
+    + row('Location', ME.location||'—') + row('Office', ME.office||'—')
+    + row('Phone', ME.phone||'—')
+    + '</tbody></table>';
+}
+function row(lbl,val){
+  return '<tr><td style="color:var(--mu);width:40%">'+lbl+'</td><td style="font-weight:600">'+val+'</td></tr>';
+}
+
+// ─────────────────────────────────────────────
+// CHANGE PASSWORD
+// ─────────────────────────────────────────────
+function changePassword(){
+  var e   = document.getElementById('pwErr');
+  var ok  = document.getElementById('pwOk');
+  var old = document.getElementById('pwOld').value;
+  var nw  = document.getElementById('pwNew').value;
+  var con = document.getElementById('pwCon').value;
+  e.style.display=ok.style.display='none';
+  if(!nw || nw.length<4){ e.textContent='Password must be at least 4 characters'; e.style.display='block'; return; }
+  if(nw !== con){ e.textContent='Passwords do not match'; e.style.display='block'; return; }
+  api('POST','/api/me/password',{old:old,new:nw}).then(function(r){
+    if(r.ok){
+      ok.textContent='✅ Password updated successfully!'; ok.style.display='block';
+      document.getElementById('pwOld').value=document.getElementById('pwNew').value=document.getElementById('pwCon').value='';
+    } else { e.textContent=r.error||'Error'; e.style.display='block'; }
+  });
+}
+
+// ─────────────────────────────────────────────
+// POLLING (real-time updates every 15s)
+// ─────────────────────────────────────────────
+function pollUpdates(){
+  api('GET','/api/notifications').then(function(d){
+    buildNav(pendingCount, d.unread);
+    unreadCount = d.unread;
+  });
+  if(IS_ADMIN){
+    api('GET','/api/requests?status=pending').then(function(reqs){
+      buildNav(reqs.length, unreadCount);
+      pendingCount = reqs.length;
+    });
+  }
+}
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', function(){
+  buildNav(0, 0);
+  // set default dates
+  var today = new Date().toISOString().split('T')[0];
+  ['leaveStart','leaveEnd','swapDate'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.value = today;
+  });
+  // go to default view
+  if(IS_ADMIN){
+    navTo('dashboard');
+  } else {
+    // load unread count first
+    api('GET','/api/notifications').then(function(d){
+      buildNav(0, d.unread);
+      unreadCount = d.unread;
+    });
+    navTo('my-schedule');
+  }
+  // poll every 15s
+  setInterval(pollUpdates, 15000);
+});
+</script>
+</body>
+</html>
