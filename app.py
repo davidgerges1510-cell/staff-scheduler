@@ -11,11 +11,11 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'staff-sched-secret-xk29')
 
 # ── Database: use PostgreSQL on Render, SQLite locally ─────────────────────────
+basedir = os.path.abspath(os.path.dirname(__file__))
 _db_url = os.environ.get('DATABASE_URL', '')
 if _db_url.startswith('postgres://'):          # Render gives old-style prefix
     _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
 if not _db_url:
-    basedir = os.path.abspath(os.path.dirname(__file__))
     os.makedirs(os.path.join(basedir, 'instance'), exist_ok=True)
     _db_url = 'sqlite:///' + os.path.join(basedir, 'instance', 'scheduler.db')
 
