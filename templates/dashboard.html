@@ -570,6 +570,7 @@ var ADMIN_NAV = [
   {id:'schedule',   ico:'📅', lbl:'Schedule'},
   {id:'requests',   ico:'📋', lbl:'Requests', badge:'pending'},
   {id:'settings',   ico:'⚙️', lbl:'Settings'},
+  {id:'password',   ico:'🔑', lbl:'Change Password'},
 ];
 var EMP_NAV = [
   {id:'my-schedule',   ico:'📅', lbl:'My Schedule'},
@@ -645,6 +646,7 @@ function navTo(id){
     case 'draft':        loadDraft();       break;
     case 'notifications':loadNotifs();      break;
     case 'profile':      loadProfile();     break;
+    case 'password':     break;
   }
   closeSB();
 }
