@@ -313,6 +313,10 @@ main{margin-left:240px;padding:24px;min-height:100vh}
         <div class="fg"><label>Month</label><input type="number" id="impMonth" value="1" min="1" max="12"></div>
       </div>
       <div class="fg"><label>Excel File</label><input type="file" id="impFile" accept=".xlsx,.xls"></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px;cursor:pointer">
+        <input type="checkbox" id="impClear" checked>
+        <span>🗑️ Clear existing schedule before import (recommended)</span>
+      </label>
       <div id="impResult" class="ok-msg" style="display:none"></div>
       <div id="impErr" class="err-msg" style="display:none"></div>
       <button class="btn bp" onclick="importExcel()">📥 Import</button>
@@ -1162,10 +1166,12 @@ function importExcel(){
   var errEl= document.getElementById('impErr');
   resEl.style.display=errEl.style.display='none';
   if(!file){ errEl.textContent='Please select a file'; errEl.style.display='block'; return; }
+  var clearFirst = document.getElementById('impClear').checked;
   var fd = new FormData();
   fd.append('file', file);
   fd.append('year', year);
   fd.append('month', month);
+  fd.append('clear_first', clearFirst ? '1' : '0');
   fetch('/api/schedule/import', {method:'POST', body:fd})
     .then(function(r){return r.json();})
     .then(function(r){
