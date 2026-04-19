@@ -106,6 +106,7 @@ class Schedule(db.Model):
     month      = db.Column(db.Integer, nullable=False)
     day        = db.Column(db.Integer, nullable=False)
     shift_code = db.Column(db.String(10), default='DOF')
+    hours      = db.Column(db.Float, nullable=True)   # custom hours override
     __table_args__ = (db.UniqueConstraint('user_id', 'year', 'month', 'day'),)
 
 
@@ -470,10 +471,12 @@ def api_schedule(year, month):
     today = date.today()
     result = []
     for emp in employees:
-        row = dict(user=emp.to_dict(), shifts={})
+        row = dict(user=emp.to_dict(), shifts={}, hours={})
         rows = Schedule.query.filter_by(user_id=emp.id, year=year, month=month).all()
         for s in rows:
             row['shifts'][str(s.day)] = s.shift_code
+            if s.hours is not None:
+                row['hours'][str(s.day)] = s.hours
         # fill any missing
         for d in range(1, days+1):
             if str(d) not in row['shifts']:
@@ -492,13 +495,16 @@ def api_update_shift():
     year = int(d.get('year'))
     month= int(d.get('month'))
     day  = int(d.get('day'))
-    code = d.get('shift_code','DOF')
+    code  = d.get('shift_code','DOF')
+    hrs   = d.get('hours')   # optional custom hours
     if code not in SHIFTS: return jsonify(ok=False, error='Invalid shift'), 400
     s = Schedule.query.filter_by(user_id=uid, year=year, month=month, day=day).first()
     if s:
         s.shift_code = code
+        if hrs is not None: s.hours = float(hrs) if hrs != '' else None
     else:
-        db.session.add(Schedule(user_id=uid, year=year, month=month, day=day, shift_code=code))
+        db.session.add(Schedule(user_id=uid, year=year, month=month, day=day, shift_code=code,
+                                hours=float(hrs) if hrs not in (None,'') else None))
     db.session.commit()
     return jsonify(ok=True)
 
@@ -553,40 +559,69 @@ def api_import_excel():
         ws = wb.active
         year  = int(request.form.get('year',  datetime.utcnow().year))
         month = int(request.form.get('month', datetime.utcnow().month))
-        import calendar as _cal
+        import calendar as _cal, re as _re
         days_in_month = _cal.monthrange(year, month)[1]
+
+        # ── Step 1: detect header row & map col_index → day_number ──
+        date_col_map = {}   # col_index (0-based) → day number
+        header_row_idx = None
+        for ri, row in enumerate(ws.iter_rows()):
+            for cell in row:
+                v = str(cell.value or '').strip()
+                # match "4/1", "4/19", "1", "2" ... as day numbers
+                m = _re.match(r'^(?:\d+/)(\d+)$', v) or _re.match(r'^(\d+)$', v)
+                if m:
+                    day = int(m.group(1))
+                    if 1 <= day <= 31:
+                        date_col_map[cell.column - 1] = day
+            if date_col_map:
+                header_row_idx = ri
+                break
+
+        # fallback: assume cols 1..days_in_month map to days 1..days_in_month
+        if not date_col_map:
+            date_col_map = {i: i for i in range(1, days_in_month + 1)}
+            header_row_idx = 0
+
         updated = 0
         errors  = []
-        for row in ws.iter_rows(min_row=2):
+        start_row = (header_row_idx or 0) + 2  # skip header + weekday-name row
+
+        for row in ws.iter_rows(min_row=start_row + 1):
             name_cell = row[0].value
             if not name_cell: continue
-            name_str = str(name_cell).strip()
+            name_str  = str(name_cell).strip()
+            if not name_str or len(name_str) < 2: continue
+            # skip rows that look like day-name rows
+            if name_str.lower() in ('mon','tue','wed','thu','fri','sat','sun'): continue
+
             # Remove extra info like "- Ru 100"
             clean_name = name_str.split('-')[0].strip()
-            # Try full name match first
             emp = User.query.filter(User.name.ilike(f'%{clean_name}%'), User.role=='employee').first()
             if not emp:
-                # Try matching by individual words (first or last name)
                 words = [w for w in clean_name.split() if len(w) > 2]
                 for word in words:
                     emp = User.query.filter(User.name.ilike(f'%{word}%'), User.role=='employee').first()
-                    if emp:
-                        break
+                    if emp: break
             if not emp:
                 errors.append(f'Employee not found: {name_str}')
                 continue
-            for col_idx in range(1, days_in_month + 1):
-                if col_idx >= len(row) + 1: break
-                cell = row[col_idx]
+
+            for col_0idx, day_num in date_col_map.items():
+                if col_0idx >= len(row): continue
+                cell = row[col_0idx]
                 val  = str(cell.value or '').strip().lower()
-                code = EXCEL_MAP.get(val)
+                # strip leading numbers like "12" from "12д"
+                val_clean = _re.sub(r'^\d+\s*', '', val).strip()
+                code = EXCEL_MAP.get(val) or EXCEL_MAP.get(val_clean)
                 if not code: continue
-                s = Schedule.query.filter_by(user_id=emp.id, year=year, month=month, day=col_idx).first()
+                s = Schedule.query.filter_by(user_id=emp.id, year=year, month=month, day=day_num).first()
                 if s:
                     s.shift_code = code
                 else:
-                    db.session.add(Schedule(user_id=emp.id, year=year, month=month, day=col_idx, shift_code=code))
+                    db.session.add(Schedule(user_id=emp.id, year=year, month=month, day=day_num, shift_code=code))
                 updated += 1
+
         db.session.commit()
         return jsonify(ok=True, updated=updated, errors=errors)
     except Exception as e:
@@ -849,6 +884,7 @@ def upgrade_db():
         ('day_hours',   'ALTER TABLE "user" ADD COLUMN day_hours FLOAT DEFAULT 12.0'),
         ('night_hours', 'ALTER TABLE "user" ADD COLUMN night_hours FLOAT DEFAULT 12.0'),
         ('sort_order',  'ALTER TABLE "user" ADD COLUMN sort_order INTEGER DEFAULT 0'),
+        ('sch_hours',   'ALTER TABLE schedule ADD COLUMN hours FLOAT'),
     ]
     with db.engine.connect() as conn:
         for col, sql in cols:
