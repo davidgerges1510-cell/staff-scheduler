@@ -27,14 +27,16 @@ db = SQLAlchemy(app)
 # CONSTANTS
 # ─────────────────────────────────────────────
 SHIFTS = {
-    'D':   {'name': 'Day',            'icon': '☀️',  'bg': '#c6f6d5', 'color': '#276749'},
-    'N':   {'name': 'Night',          'icon': '🌙',  'bg': '#e9d8fd', 'color': '#553c9a'},
-    'DS':  {'name': 'Day Trainee',    'icon': '🌤️', 'bg': '#fefcbf', 'color': '#744210'},
-    'NS':  {'name': 'Night Trainee',  'icon': '🌛',  'bg': '#e9d8fd', 'color': '#322659'},
-    'BL':  {'name': 'Sick Leave',     'icon': '🤒',  'bg': '#fed7d7', 'color': '#9b2c2c'},
-    'OO':  {'name': 'Annual Leave',   'icon': '✈️',  'bg': '#bee3f8', 'color': '#2a4365'},
-    'DOF': {'name': 'Day Off',        'icon': '😴',  'bg': '#f7fafc', 'color': '#718096'},
-    'OS':  {'name': 'Personal Leave', 'icon': '🏠',  'bg': '#fffbeb', 'color': '#744210'},
+    'D':   {'name': 'Day',              'icon': '☀️',  'bg': '#c6f6d5', 'color': '#276749'},
+    'N':   {'name': 'Night',            'icon': '🌙',  'bg': '#e9d8fd', 'color': '#553c9a'},
+    'DSS': {'name': 'Day Senior',       'icon': '☀️⭐','bg': '#f0fff4', 'color': '#22543d'},
+    'NSS': {'name': 'Night Senior',     'icon': '🌙⭐','bg': '#faf5ff', 'color': '#322659'},
+    'DS':  {'name': 'Day Trainee',      'icon': '🌤️', 'bg': '#fefcbf', 'color': '#744210'},
+    'NS':  {'name': 'Night Trainee',    'icon': '🌛',  'bg': '#e9d8fd', 'color': '#44337a'},
+    'BL':  {'name': 'Sick Leave',       'icon': '🤒',  'bg': '#fed7d7', 'color': '#9b2c2c'},
+    'OO':  {'name': 'Vacation',         'icon': '✈️',  'bg': '#bee3f8', 'color': '#2a4365'},
+    'OS':  {'name': 'Vacation Unpaid',  'icon': '🏠',  'bg': '#fffbeb', 'color': '#744210'},
+    'DOF': {'name': 'Day Off',          'icon': '😴',  'bg': '#f7fafc', 'color': '#718096'},
 }
 LEAVE_TYPES = {'annual': 'Annual Leave', 'sick': 'Sick Leave', 'personal': 'Personal Leave', 'unpaid': 'Unpaid Leave'}
 SHIFT_PATTERNS = [
@@ -219,16 +221,8 @@ def current_user():
     return db.session.get(User, uid) if uid else None
 
 def ensure_schedule(user, year, month):
-    """Auto-generate schedule for a month if not exists."""
-    days = calendar.monthrange(year, month)[1]
-    existing = {s.day for s in Schedule.query.filter_by(user_id=user.id, year=year, month=month).all()}
-    pat = SHIFT_PATTERNS[user.shift_pattern % len(SHIFT_PATTERNS)]
-    for d in range(1, days + 1):
-        if d not in existing:
-            first_day_of_year = date(year, 1, 1)
-            day_of_year = (date(year, month, d) - first_day_of_year).days
-            shift = pat[day_of_year % 7]
-            db.session.add(Schedule(user_id=user.id, year=year, month=month, day=d, shift_code=shift))
+    """No longer auto-fills schedule — empty days stay blank."""
+    pass  # schedule cells are blank until explicitly set or imported
     db.session.commit()
 
 def add_notification(user_id, ntype, message):
@@ -477,10 +471,7 @@ def api_schedule(year, month):
             row['shifts'][str(s.day)] = s.shift_code
             if s.hours is not None:
                 row['hours'][str(s.day)] = s.hours
-        # fill any missing
-        for d in range(1, days+1):
-            if str(d) not in row['shifts']:
-                row['shifts'][str(d)] = 'DOF'
+        # empty days stay as '' (blank) — not auto-filled with DOF
         result.append(row)
     return jsonify(year=year, month=month, days=days,
                    first_weekday=date(year, month, 1).weekday(),
@@ -535,14 +526,26 @@ def api_my_schedule_update():
 # API — EXCEL IMPORT
 # ─────────────────────────────────────────────
 EXCEL_MAP = {
-    'д': 'D', '12 д': 'D', '12д': 'D',
-    'н': 'N', '12 н': 'N', '12н': 'N',
-    '12д/с': 'DS', '12 д/с': 'DS', 'д/с': 'DS', '12л/с': 'DS',
-    '12н/с': 'NS', '12 н/с': 'NS', 'н/с': 'NS', '12 н сс': 'NS', '12н сс': 'NS',
-    'б/л': 'BL', 'бл': 'BL',
-    'о/о': 'OO', 'оо': 'OO',
-    'д/оф': 'DOF', 'доф': 'DOF', 'дof': 'DOF',
-    'о/с': 'OS', 'ос': 'OS',
+    # Day
+    'д': 'D', '12 д': 'D', '12д': 'D', '12 д.': 'D',
+    # Night
+    'н': 'N', '12 н': 'N', '12н': 'N', '12 н.': 'N',
+    # Day Senior
+    '12д сс': 'DSS', '12 д сс': 'DSS', 'д сс': 'DSS', '12д сс.': 'DSS',
+    # Night Senior
+    '12н сс': 'NSS', '12 н сс': 'NSS', 'н сс': 'NSS', '12н сс.': 'NSS',
+    # Day Trainee
+    '12д/с': 'DS', '12 д/с': 'DS', 'д/с': 'DS', '12л/с': 'DS', '12 л/с': 'DS',
+    # Night Trainee
+    '12н/с': 'NS', '12 н/с': 'NS', 'н/с': 'NS',
+    # Sick
+    'б/л': 'BL', 'бл': 'BL', 'б/л.': 'BL',
+    # Vacation paid
+    'о/о': 'OO', 'оо': 'OO', 'о/о.': 'OO',
+    # Vacation unpaid / personal
+    'о/с': 'OS', 'ос': 'OS', 'o/c': 'OS', 'o/с': 'OS', 'о/c': 'OS',
+    # Day Off
+    'д/оф': 'DOF', 'доф': 'DOF', 'д/оф.': 'DOF',
 }
 
 @app.route('/api/schedule/import', methods=['POST'])
@@ -560,42 +563,61 @@ def api_import_excel():
         year  = int(request.form.get('year',  datetime.utcnow().year))
         month = int(request.form.get('month', datetime.utcnow().month))
         import calendar as _cal, re as _re
+        from datetime import datetime as _dt, date as _date
         days_in_month = _cal.monthrange(year, month)[1]
 
-        # ── Step 1: detect header row & map col_index → day_number ──
-        date_col_map = {}   # col_index (0-based) → day number
-        header_row_idx = None
-        for ri, row in enumerate(ws.iter_rows()):
+        def cell_day(cell):
+            """Return day number if cell contains a date for target month, else None."""
+            v = cell.value
+            # Excel date object
+            if isinstance(v, (_dt, _date)):
+                if v.month == month and v.year == year:
+                    return v.day
+                return None
+            # string like "4/1", "4/19"
+            s = str(v or '').strip()
+            m = _re.match(r'^\d+/(\d+)$', s)
+            if m:
+                return int(m.group(1))
+            # plain integer day number
+            m2 = _re.match(r'^(\d{1,2})$', s)
+            if m2:
+                d = int(m2.group(1))
+                if 1 <= d <= days_in_month:
+                    return d
+            return None
+
+        # ── Step 1: detect header row & build col_index→day map ──
+        date_col_map = {}
+        header_row_idx = 0
+        for ri, row in enumerate(ws.iter_rows(max_row=5)):
+            tmp = {}
             for cell in row:
-                v = str(cell.value or '').strip()
-                # match "4/1", "4/19", "1", "2" ... as day numbers
-                m = _re.match(r'^(?:\d+/)(\d+)$', v) or _re.match(r'^(\d+)$', v)
-                if m:
-                    day = int(m.group(1))
-                    if 1 <= day <= 31:
-                        date_col_map[cell.column - 1] = day
-            if date_col_map:
+                d = cell_day(cell)
+                if d:
+                    tmp[cell.column - 1] = d
+            if len(tmp) >= 5:  # need at least 5 date columns to trust it
+                date_col_map = tmp
                 header_row_idx = ri
                 break
 
-        # fallback: assume cols 1..days_in_month map to days 1..days_in_month
+        # fallback: col index = day number (col B=1, col C=2…)
         if not date_col_map:
             date_col_map = {i: i for i in range(1, days_in_month + 1)}
             header_row_idx = 0
 
         updated = 0
         errors  = []
-        start_row = (header_row_idx or 0) + 2  # skip header + weekday-name row
+        skip_rows = header_row_idx + 2  # skip date-header + weekday-name row
 
-        for row in ws.iter_rows(min_row=start_row + 1):
-            name_cell = row[0].value
-            if not name_cell: continue
-            name_str  = str(name_cell).strip()
-            if not name_str or len(name_str) < 2: continue
-            # skip rows that look like day-name rows
-            if name_str.lower() in ('mon','tue','wed','thu','fri','sat','sun'): continue
+        for row in ws.iter_rows(min_row=skip_rows + 1):
+            name_val = row[0].value
+            if not name_val: continue
+            name_str = str(name_val).strip()
+            if len(name_str) < 2: continue
+            if name_str.lower() in ('mon','tue','wed','thu','fri','sat','sun','пн','вт','ср','чт','пт','сб','вс'):
+                continue
 
-            # Remove extra info like "- Ru 100"
             clean_name = name_str.split('-')[0].strip()
             emp = User.query.filter(User.name.ilike(f'%{clean_name}%'), User.role=='employee').first()
             if not emp:
@@ -609,11 +631,14 @@ def api_import_excel():
 
             for col_0idx, day_num in date_col_map.items():
                 if col_0idx >= len(row): continue
-                cell = row[col_0idx]
-                val  = str(cell.value or '').strip().lower()
-                # strip leading numbers like "12" from "12д"
-                val_clean = _re.sub(r'^\d+\s*', '', val).strip()
-                code = EXCEL_MAP.get(val) or EXCEL_MAP.get(val_clean)
+                cell_val = str(row[col_0idx].value or '').strip()
+                if not cell_val: continue
+                val = cell_val.lower()
+                code = EXCEL_MAP.get(val)
+                if not code:
+                    # try stripping leading "12" or number prefix
+                    val2 = _re.sub(r'^\d+\s*', '', val).strip()
+                    code = EXCEL_MAP.get(val2)
                 if not code: continue
                 s = Schedule.query.filter_by(user_id=emp.id, year=year, month=month, day=day_num).first()
                 if s:
