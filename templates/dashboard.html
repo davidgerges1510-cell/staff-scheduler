@@ -296,7 +296,15 @@ main{margin-left:240px;padding:24px;min-height:100vh}
 
   <!-- ═══════════ CHANGE PASSWORD (ADMIN) ═══════════ -->
   <div class="view" id="v-password">
-    <div class="card" style="max-width:420px">
+    <div class="card" style="max-width:480px;margin-bottom:18px">
+      <div class="ct"><div class="ct-l">👤 My Info</div></div>
+      <div id="adminInfoErr" class="err-msg"></div>
+      <div id="adminInfoOk" class="ok-msg"></div>
+      <div class="fg"><label>Full Name</label><input type="text" id="adminName" placeholder="Your name"></div>
+      <div class="fg"><label>Email</label><input type="email" id="adminEmail" placeholder="your@email.com"></div>
+      <button class="btn bp" onclick="saveAdminInfo()">💾 Save Info</button>
+    </div>
+    <div class="card" style="max-width:480px">
       <div class="ct"><div class="ct-l">🔑 Change Password</div></div>
       <div id="pwErr" class="err-msg"></div>
       <div id="pwOk" class="ok-msg"></div>
@@ -659,7 +667,7 @@ function navTo(id){
     case 'draft':        loadDraft();       break;
     case 'notifications':loadNotifs();      break;
     case 'profile':      loadProfile();     break;
-    case 'password':     break;
+    case 'password':     loadAdminPassword(); break;
   }
   closeSB();
 }
@@ -1364,6 +1372,23 @@ function row(lbl,val){
 
 // ─────────────────────────────────────────────
 // CHANGE PASSWORD
+// ─────────────────────────────────────────────
+function loadAdminPassword(){
+  document.getElementById('adminName').value  = ME.name || '';
+  document.getElementById('adminEmail').value = ME.email || '';
+}
+function saveAdminInfo(){
+  var e  = document.getElementById('adminInfoErr');
+  var ok = document.getElementById('adminInfoOk');
+  e.style.display = ok.style.display = 'none';
+  var name  = document.getElementById('adminName').value.trim();
+  var email = document.getElementById('adminEmail').value.trim();
+  if(!name){ e.textContent='Name is required'; e.style.display='block'; return; }
+  api('PUT','/api/users/'+ME.id,{name:name,email:email,username:ME.username,color:ME.color,vac_days:ME.vac_days,sick_days:ME.sick_days}).then(function(r){
+    if(r.id){ ME.name=name; ME.email=email; ok.textContent='✅ Info saved!'; ok.style.display='block'; }
+    else { e.textContent=r.error||'Error saving'; e.style.display='block'; }
+  });
+}
 // ─────────────────────────────────────────────
 function changePassword(){
   var e   = document.getElementById('pwErr');
