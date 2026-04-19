@@ -1186,12 +1186,25 @@ function importExcel(){
     .then(function(r){
       if(r.ok){
         var msg = '✅ Imported '+r.updated+' shifts!';
+        msg += '  (Cols mapped: '+r.col_map_size+', Data starts row: '+r.data_start+')';
         if(r.errors && r.errors.length) msg += '\n⚠️ Not found: '+r.errors.join(', ');
-        if(r.warning) msg += '\n❓ Unknown values: '+r.warning;
+        if(r.warning) msg += '\n❓ Unrecognized: '+r.warning;
+        // show debug table for first employee
+        var debugHtml = '';
+        if(r.debug && r.debug.length){
+          r.debug.forEach(function(emp){
+            debugHtml += '<div style="margin-top:8px;font-size:11px"><b>'+emp.name+'</b><br>';
+            var days = Object.keys(emp.cells).sort(function(a,b){return+a-+b;});
+            days.forEach(function(d){
+              if(emp.cells[d]) debugHtml += '<span style="margin-right:4px;background:#f7fafc;padding:1px 4px;border-radius:3px">'+d+':'+emp.cells[d]+'</span>';
+            });
+            debugHtml += '</div>';
+          });
+        }
         resEl.style.whiteSpace='pre-line';
-        resEl.textContent = msg;
+        resEl.innerHTML = msg.replace(/\n/g,'<br>') + debugHtml;
         resEl.style.display='block';
-        if(r.updated > 0) setTimeout(function(){ navTo('schedule'); }, 1500);
+        if(r.updated > 0) setTimeout(function(){ navTo('schedule'); }, 2500);
       } else {
         errEl.textContent = r.error||'Import failed';
         errEl.style.display='block';
