@@ -64,6 +64,8 @@ class User(db.Model):
     vac_days     = db.Column(db.Integer, default=21)
     sick_days    = db.Column(db.Integer, default=14)
     shift_pattern= db.Column(db.Integer, default=0)
+    day_hours    = db.Column(db.Float, default=12.0)
+    night_hours  = db.Column(db.Float, default=12.0)
     is_active    = db.Column(db.Boolean, default=True)
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -89,6 +91,7 @@ class User(db.Model):
                     department=self.department or '', location=self.location or '',
                     office=self.office or '', phone=self.phone or '',
                     color=self.color, vac_days=self.vac_days, sick_days=self.sick_days,
+                    day_hours=self.day_hours or 12.0, night_hours=self.night_hours or 12.0,
                     initials=self.initials())
 
 
@@ -411,8 +414,10 @@ def api_edit_user(uid):
     d = request.get_json()
     for f in ('name','email','department','location','office','phone'):
         if f in d: setattr(u, f, d[f])
-    if 'vac_days'  in d: u.vac_days  = int(d['vac_days'])
-    if 'sick_days' in d: u.sick_days = int(d['sick_days'])
+    if 'vac_days'   in d: u.vac_days   = int(d['vac_days'])
+    if 'sick_days'  in d: u.sick_days  = int(d['sick_days'])
+    if 'day_hours'  in d: u.day_hours  = float(d['day_hours'])
+    if 'night_hours'in d: u.night_hours= float(d['night_hours'])
     db.session.commit()
     return jsonify(ok=True, user=u.to_dict())
 
@@ -480,6 +485,84 @@ def api_update_shift():
         db.session.add(Schedule(user_id=uid, year=year, month=month, day=day, shift_code=code))
     db.session.commit()
     return jsonify(ok=True)
+
+# ─────────────────────────────────────────────
+# API — EMPLOYEE SELF-EDIT SCHEDULE
+# ─────────────────────────────────────────────
+@app.route('/api/my-schedule', methods=['POST'])
+@login_required
+def api_my_schedule_update():
+    u = current_user()
+    if AppSettings.get('schedule_locked', 'false') == 'true' and u.role != 'admin':
+        return jsonify(ok=False, error='Schedule editing is currently locked by admin'), 403
+    d    = request.get_json()
+    year = int(d.get('year'))
+    month= int(d.get('month'))
+    day  = int(d.get('day'))
+    code = d.get('shift_code', 'DOF')
+    if code not in SHIFTS: return jsonify(ok=False, error='Invalid shift'), 400
+    s = Schedule.query.filter_by(user_id=u.id, year=year, month=month, day=day).first()
+    if s:
+        s.shift_code = code
+    else:
+        db.session.add(Schedule(user_id=u.id, year=year, month=month, day=day, shift_code=code))
+    db.session.commit()
+    return jsonify(ok=True)
+
+# ─────────────────────────────────────────────
+# API — EXCEL IMPORT
+# ─────────────────────────────────────────────
+EXCEL_MAP = {
+    'д': 'D', '12 д': 'D', '12д': 'D',
+    'н': 'N', '12 н': 'N', '12н': 'N',
+    'б/л': 'BL', 'бл': 'BL',
+    'о/о': 'OO', 'оо': 'OO',
+    'д/оф': 'DOF', 'доф': 'DOF', 'дof': 'DOF',
+    'о/с': 'OS', 'ос': 'OS',
+}
+
+@app.route('/api/schedule/import', methods=['POST'])
+@admin_required
+def api_import_excel():
+    try:
+        import openpyxl
+    except ImportError:
+        return jsonify(ok=False, error='openpyxl not installed'), 500
+    f = request.files.get('file')
+    if not f: return jsonify(ok=False, error='No file'), 400
+    try:
+        wb = openpyxl.load_workbook(f, data_only=True)
+        ws = wb.active
+        year  = int(request.form.get('year',  datetime.utcnow().year))
+        month = int(request.form.get('month', datetime.utcnow().month))
+        import calendar as _cal
+        days_in_month = _cal.monthrange(year, month)[1]
+        updated = 0
+        errors  = []
+        for row in ws.iter_rows(min_row=2):
+            name_cell = row[0].value
+            if not name_cell: continue
+            name_str = str(name_cell).strip()
+            emp = User.query.filter(User.name.ilike(f'%{name_str}%'), User.role=='employee').first()
+            if not emp:
+                errors.append(f'Employee not found: {name_str}')
+                continue
+            for col_idx in range(1, days_in_month + 1):
+                if col_idx >= len(row) + 1: break
+                cell = row[col_idx]
+                val  = str(cell.value or '').strip().lower()
+                code = EXCEL_MAP.get(val)
+                if not code: continue
+                s = Schedule.query.filter_by(user_id=emp.id, year=year, month=month, day=col_idx).first()
+                if s:
+                    s.shift_code = code
+                else:
+                    db.session.add(Schedule(user_id=emp.id, year=year, month=month, day=col_idx, shift_code=code))
+                updated += 1
+        db.session.commit()
+        return jsonify(ok=True, updated=updated, errors=errors)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
 
 # ─────────────────────────────────────────────
 # API — REQUESTS
@@ -642,6 +725,7 @@ def api_get_settings():
         email_enabled= AppSettings.get('email_enabled','false'),
         day_hours    = AppSettings.get('day_hours',   '12'),
         night_hours  = AppSettings.get('night_hours', '12'),
+        schedule_locked = AppSettings.get('schedule_locked', 'false'),
     )
 
 @app.route('/api/settings', methods=['POST'])
@@ -649,7 +733,7 @@ def api_get_settings():
 def api_save_settings():
     d = request.get_json()
     for key in ('smtp_server','smtp_port','smtp_user','smtp_pass','from_name',
-                'email_enabled','day_hours','night_hours'):
+                'email_enabled','day_hours','night_hours','schedule_locked'):
         if key in d:
             AppSettings.put(key, d[key])
     return jsonify(ok=True)
