@@ -294,6 +294,19 @@ main{margin-left:240px;padding:24px;min-height:100vh}
     </div>
   </div>
 
+  <!-- ═══════════ CHANGE PASSWORD (ADMIN) ═══════════ -->
+  <div class="view" id="v-password">
+    <div class="card" style="max-width:420px">
+      <div class="ct"><div class="ct-l">🔑 Change Password</div></div>
+      <div id="pwErr" class="err-msg"></div>
+      <div id="pwOk" class="ok-msg"></div>
+      <div class="fg"><label>Current Password</label><input type="password" id="pwOld" placeholder="Leave empty if no password"></div>
+      <div class="fg"><label>New Password</label><input type="password" id="pwNew" placeholder="Min 4 characters"></div>
+      <div class="fg"><label>Confirm Password</label><input type="password" id="pwCon" placeholder="Repeat new password"></div>
+      <button class="btn bp" onclick="changePassword()">💾 Update Password</button>
+    </div>
+  </div>
+
   {% else %}
   <!-- ═══════════ EMPLOYEE SCHEDULE ═══════════ -->
   <div class="view" id="v-my-schedule">
