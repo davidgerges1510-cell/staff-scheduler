@@ -1019,12 +1019,16 @@ function loadSchedule(){
         + '<div><div style="font-size:11px;font-weight:600">'+u.name+'</div>'
         + '<div style="font-size:9px;color:var(--mu)">'+(u.department||'')+'</div></div></div></td>';
       for(var i=1;i<=days;i++){
-        var code = row.shifts[String(i)] || 'DOF';
-        var s    = SHIFTS[code] || {bg:'#f7fafc',color:'#718096',icon:'',name:code};
+        var code = row.shifts[String(i)] || '';
         var isTod = i===today;
-        b += '<td class="ce'+(isTod?' tc':'')+'" onclick="openShiftEdit('+u.id+','+i+')">'
-          + '<span style="background:'+s.bg+';color:'+s.color+';padding:2px 4px;border-radius:4px;'
-          + 'font-size:9px;font-weight:700;font-family:monospace">'+s.icon+' '+code+'</span></td>';
+        var cellContent;
+        if(!code){
+          cellContent = '<span style="display:block;width:100%;height:18px"></span>';
+        } else {
+          var s = SHIFTS[code] || {bg:'#f7fafc',color:'#718096',icon:'',name:code};
+          cellContent = '<span style="background:'+s.bg+';color:'+s.color+';padding:2px 4px;border-radius:4px;font-size:9px;font-weight:700;font-family:monospace">'+s.icon+' '+code+'</span>';
+        }
+        b += '<td class="ce'+(isTod?' tc':'')+'" onclick="openShiftEdit('+u.id+','+i+')">'+cellContent+'</td>';
       }
       b += '</tr>';
     });
@@ -1245,12 +1249,16 @@ function loadTeam(){
         + '<div class="ea" style="background:'+u.color+';width:24px;height:24px;font-size:9px">'+u.initials+'</div>'
         + '<div style="font-size:11px;font-weight:600">'+u.name+'</div></div></td>';
       for(var i=1;i<=days;i++){
-        var code = row.shifts[String(i)] || 'DOF';
-        var s = SHIFTS[code] || {bg:'#f7fafc',color:'#718096',icon:'',name:code};
+        var code = row.shifts[String(i)] || '';
         var isTod = i===today;
-        b += '<td style="'+(isTod?'background:var(--tl)':'')+'"><span style="background:'+s.bg+';color:'+s.color
-          + ';padding:2px 4px;border-radius:4px;font-size:9px;font-weight:700;font-family:monospace">'
-          + s.icon+' '+code+'</span></td>';
+        var cellSpan;
+        if(!code){
+          cellSpan = '<span style="display:block;width:100%;height:18px"></span>';
+        } else {
+          var s = SHIFTS[code] || {bg:'#f7fafc',color:'#718096',icon:'',name:code};
+          cellSpan = '<span style="background:'+s.bg+';color:'+s.color+';padding:2px 4px;border-radius:4px;font-size:9px;font-weight:700;font-family:monospace">'+s.icon+' '+code+'</span>';
+        }
+        b += '<td style="'+(isTod?'background:var(--tl)':'')+'">'+cellSpan+'</td>';
       }
       b += '</tr>';
     });
@@ -1269,8 +1277,8 @@ function renderCalendar(elId, data, myRow, clickable, draftReqs){
     .map(function(d){return '<div class="ch">'+d+'</div>';}).join('');
   for(var i=0;i<first;i++) h += '<div class="cd empty"></div>';
   for(var d=1;d<=days;d++){
-    var code = myRow.shifts[String(d)] || 'DOF';
-    var s    = SHIFTS[code];
+    var code = myRow.shifts[String(d)] || '';
+    var s    = code ? SHIFTS[code] : null;
     var ds   = '';
     if(s) ds = '<div class="ds" style="background:'+s.bg+';color:'+s.color+'">'
       + s.icon+' '+code+'</div>';
@@ -1430,8 +1438,8 @@ function loadDraft(){
     ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function(d){ h+='<div style="text-align:center;font-size:11px;font-weight:700;color:var(--mu);padding:4px">'+d+'</div>'; });
     for(var i=0;i<fw;i++) h+='<div></div>';
     for(var d=1;d<=days;d++){
-      var code = me.shifts[String(d)] || 'DOF';
-      var sh = SHIFTS[code] || SHIFTS['DOF'];
+      var code = me.shifts[String(d)] || '';
+      var sh = (code && SHIFTS[code]) ? SHIFTS[code] : {bg:'#f9fafb',color:'#a0aec0',icon:'',name:''};
       var isTod = d===today;
       h += '<div onclick="mySchedClickDay('+d+')" style="cursor:'+(schedLocked?'default':'pointer')+';border-radius:8px;padding:6px 2px;text-align:center;background:'+sh.bg+';color:'+sh.color+';border:'+( isTod?'2px solid #2d6a4f':'1px solid rgba(0,0,0,.08)')+';font-size:11px">'
         + '<div style="font-weight:700">'+d+'</div>'
