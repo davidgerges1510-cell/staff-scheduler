@@ -68,6 +68,7 @@ class User(db.Model):
     shift_pattern= db.Column(db.Integer, default=0)
     day_hours    = db.Column(db.Float, default=12.0)
     night_hours  = db.Column(db.Float, default=12.0)
+    sort_order   = db.Column(db.Integer, default=0)
     is_active    = db.Column(db.Boolean, default=True)
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -94,6 +95,7 @@ class User(db.Model):
                     office=self.office or '', phone=self.phone or '',
                     color=self.color, vac_days=self.vac_days, sick_days=self.sick_days,
                     day_hours=self.day_hours or 12.0, night_hours=self.night_hours or 12.0,
+                    sort_order=self.sort_order or 0,
                     initials=self.initials())
 
 
@@ -379,9 +381,9 @@ def api_change_password():
 def api_users():
     u = current_user()
     if u.role == 'admin':
-        users = User.query.filter_by(is_active=True).order_by(User.role.desc(), User.name).all()
+        users = User.query.filter_by(is_active=True).order_by(User.role.desc(), User.sort_order, User.name).all()
     else:
-        users = User.query.filter_by(is_active=True, role='employee').all()
+        users = User.query.filter_by(is_active=True, role='employee').order_by(User.sort_order, User.name).all()
     return jsonify([x.to_dict() for x in users])
 
 @app.route('/api/users', methods=['POST'])
@@ -441,6 +443,18 @@ def api_set_password(uid):
     u.set_password(pw); db.session.commit()
     return jsonify(ok=True)
 
+@app.route('/api/users/reorder', methods=['POST'])
+@admin_required
+def api_reorder_users():
+    """Reorder employees: body = {"order": [id1, id2, id3, ...]}"""
+    ids = (request.get_json() or {}).get('order', [])
+    for idx, uid in enumerate(ids):
+        u = User.query.get(uid)
+        if u and u.role == 'employee':
+            u.sort_order = idx
+    db.session.commit()
+    return jsonify(ok=True)
+
 # ─────────────────────────────────────────────
 # API — SCHEDULE
 # ─────────────────────────────────────────────
@@ -448,7 +462,7 @@ def api_set_password(uid):
 @login_required
 def api_schedule(year, month):
     u = current_user()
-    employees = User.query.filter_by(is_active=True, role='employee').all()
+    employees = User.query.filter_by(is_active=True, role='employee').order_by(User.sort_order, User.name).all()
     # ensure schedules exist for all employees
     for emp in employees:
         ensure_schedule(emp, year, month)
@@ -547,7 +561,17 @@ def api_import_excel():
             name_cell = row[0].value
             if not name_cell: continue
             name_str = str(name_cell).strip()
-            emp = User.query.filter(User.name.ilike(f'%{name_str}%'), User.role=='employee').first()
+            # Remove extra info like "- Ru 100"
+            clean_name = name_str.split('-')[0].strip()
+            # Try full name match first
+            emp = User.query.filter(User.name.ilike(f'%{clean_name}%'), User.role=='employee').first()
+            if not emp:
+                # Try matching by individual words (first or last name)
+                words = [w for w in clean_name.split() if len(w) > 2]
+                for word in words:
+                    emp = User.query.filter(User.name.ilike(f'%{word}%'), User.role=='employee').first()
+                    if emp:
+                        break
             if not emp:
                 errors.append(f'Employee not found: {name_str}')
                 continue
@@ -824,6 +848,7 @@ def upgrade_db():
     cols = [
         ('day_hours',   'ALTER TABLE "user" ADD COLUMN day_hours FLOAT DEFAULT 12.0'),
         ('night_hours', 'ALTER TABLE "user" ADD COLUMN night_hours FLOAT DEFAULT 12.0'),
+        ('sort_order',  'ALTER TABLE "user" ADD COLUMN sort_order INTEGER DEFAULT 0'),
     ]
     with db.engine.connect() as conn:
         for col, sql in cols:
