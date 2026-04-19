@@ -709,10 +709,16 @@ def seed_db():
 # ─────────────────────────────────────────────
 # STARTUP
 # ─────────────────────────────────────────────
-with app.app_context():
-    os.makedirs(os.path.join(basedir, 'instance'), exist_ok=True)
-    db.create_all()
-    seed_db()
+try:
+    with app.app_context():
+        os.makedirs(os.path.join(basedir, 'instance'), exist_ok=True)
+        db.create_all()
+        seed_db()
+        print("✅ Database initialized successfully")
+except Exception as _startup_err:
+    import traceback
+    print(f"❌ Startup error: {_startup_err}")
+    traceback.print_exc()
 
 if __name__ == '__main__':
     import socket
