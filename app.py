@@ -563,8 +563,9 @@ def api_import_excel():
 
         wb  = openpyxl.load_workbook(f, data_only=True)
         ws  = wb.active
-        year  = int(request.form.get('year',  datetime.utcnow().year))
-        month = int(request.form.get('month', datetime.utcnow().month))
+        year        = int(request.form.get('year',  datetime.utcnow().year))
+        month       = int(request.form.get('month', datetime.utcnow().month))
+        clear_first = request.form.get('clear_first', '0') == '1'
         days_in_month = _cal.monthrange(year, month)[1]
 
         # ── Read ALL rows into memory ──
@@ -656,6 +657,11 @@ def api_import_excel():
             if not emp:
                 errors.append(f'Not found: {name_str}')
                 continue
+
+            # clear existing schedule for this employee/month before import
+            if clear_first:
+                Schedule.query.filter_by(user_id=emp.id, year=year, month=month).delete()
+                db.session.flush()
 
             for ci, day_num in date_col_map.items():
                 if ci >= len(row): continue
