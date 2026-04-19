@@ -29,6 +29,8 @@ db = SQLAlchemy(app)
 SHIFTS = {
     'D':   {'name': 'Day',            'icon': '☀️',  'bg': '#c6f6d5', 'color': '#276749'},
     'N':   {'name': 'Night',          'icon': '🌙',  'bg': '#e9d8fd', 'color': '#553c9a'},
+    'DS':  {'name': 'Day Trainee',    'icon': '🌤️', 'bg': '#fefcbf', 'color': '#744210'},
+    'NS':  {'name': 'Night Trainee',  'icon': '🌛',  'bg': '#e9d8fd', 'color': '#322659'},
     'BL':  {'name': 'Sick Leave',     'icon': '🤒',  'bg': '#fed7d7', 'color': '#9b2c2c'},
     'OO':  {'name': 'Annual Leave',   'icon': '✈️',  'bg': '#bee3f8', 'color': '#2a4365'},
     'DOF': {'name': 'Day Off',        'icon': '😴',  'bg': '#f7fafc', 'color': '#718096'},
@@ -515,6 +517,8 @@ def api_my_schedule_update():
 EXCEL_MAP = {
     'д': 'D', '12 д': 'D', '12д': 'D',
     'н': 'N', '12 н': 'N', '12н': 'N',
+    '12д/с': 'DS', '12 д/с': 'DS', 'д/с': 'DS', '12л/с': 'DS',
+    '12н/с': 'NS', '12 н/с': 'NS', 'н/с': 'NS', '12 н сс': 'NS', '12н сс': 'NS',
     'б/л': 'BL', 'бл': 'BL',
     'о/о': 'OO', 'оо': 'OO',
     'д/оф': 'DOF', 'доф': 'DOF', 'дof': 'DOF',
