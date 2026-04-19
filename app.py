@@ -568,87 +568,46 @@ def api_import_excel():
         clear_first = request.form.get('clear_first', '0') == '1'
         days_in_month = _cal.monthrange(year, month)[1]
 
-        # ── Read ALL rows into memory ──
+        # ── Read all rows ──
         all_rows = list(ws.iter_rows())
+        if len(all_rows) < 3:
+            return jsonify(ok=False, error='File too short')
 
-        # ── Step 1: find header row with day-numbers ──
-        def extract_day(v):
-            if v is None: return None
-            if isinstance(v, (_dt, _date)):
-                return v.day if (v.month == month) else None
-            if isinstance(v, (int, float)):
-                d = int(v); return d if 1 <= d <= 31 else None
-            s = str(v).strip()
-            m = _re.match(r'^(\d{1,2})[/\-.](\d{1,2})', s)
-            if m:
-                # could be M/D or D/M — pick the one ≤ days_in_month
-                a, b = int(m.group(1)), int(m.group(2))
-                if a == month and 1 <= b <= days_in_month: return b
-                if b == month and 1 <= a <= days_in_month: return a
-                if 1 <= b <= days_in_month: return b
-            m2 = _re.match(r'^(\d{1,2})$', s)
-            if m2:
-                d = int(m2.group(1)); return d if 1 <= d <= days_in_month else None
-            return None
-
-        date_col_map = {}   # col_index(0-based) → day_number
-        header_ri    = 0
-        for ri, row in enumerate(all_rows[:5]):
-            tmp = {}
-            for cell in row:
-                d = extract_day(cell.value)
-                if d: tmp[cell.column - 1] = d
-            if len(tmp) >= 5:
-                date_col_map = tmp
-                header_ri    = ri
-                break
-
-        # fallback: column B=day1, C=day2, …
-        if not date_col_map:
-            date_col_map = {i: i for i in range(1, days_in_month + 1)}
-            header_ri    = 0
-
-        # ── Step 2: skip header row + 1 weekday-name row ──
-        emp_rows = all_rows[header_ri + 2:]   # 0-indexed list slicing
-
+        # ── Structure: row1=dates, row2=weekday names, row3+=employees ──
+        # col A (index 0) = name, col B (index 1) = day 1, col C = day 2 ...
         SKIP = {'mon','tue','wed','thu','fri','sat','sun',
                 'пн','вт','ср','чт','пт','сб','вс'}
 
-        def normalize_shift(raw):
-            """Try multiple normalizations to find a EXCEL_MAP match."""
-            if not raw: return None
-            val = str(raw).strip().lower()
-            # direct
-            code = EXCEL_MAP.get(val)
-            if code: return code
-            # collapse multiple spaces
-            val2 = _re.sub(r'\s+', ' ', val)
-            code = EXCEL_MAP.get(val2)
-            if code: return code
-            # strip leading number prefix like "12", "8"
-            val3 = _re.sub(r'^\d+\s*', '', val2).strip()
-            code = EXCEL_MAP.get(val3)
-            if code: return code
-            # replace latin look-alike letters (o→о, c→с)
-            val4 = val2.replace('o','о').replace('c','с').replace('e','е')
-            code = EXCEL_MAP.get(val4)
-            if code: return code
-            val5 = _re.sub(r'^\d+\s*', '', val4).strip()
-            return EXCEL_MAP.get(val5)
+        def norm(raw):
+            if raw is None: return None
+            v = str(raw).strip().lower()
+            # collapse spaces
+            v = _re.sub(r'\s+', ' ', v)
+            # direct lookup
+            c = EXCEL_MAP.get(v)
+            if c: return c
+            # replace latin letters that look like Cyrillic
+            v2 = v.replace('o','о').replace('c','с').replace('a','а').replace('e','е').replace('x','х')
+            c = EXCEL_MAP.get(v2)
+            if c: return c
+            # strip leading number (e.g. "12д/с" → "д/с")
+            v3 = _re.sub(r'^\d+\s*', '', v2).strip()
+            c = EXCEL_MAP.get(v3)
+            if c: return c
+            return None
 
         updated      = 0
         errors       = []
         unrecognized = set()
 
-        for row in emp_rows:
-            if not row: continue
+        for row in all_rows[2:]:   # skip row1 (dates) and row2 (weekday names)
             name_raw = row[0].value
             if not name_raw: continue
             name_str = str(name_raw).strip()
             if len(name_str) < 2 or name_str.lower() in SKIP: continue
 
-            # find employee
-            clean = name_str.split('-')[0].strip()
+            # find employee by name
+            clean = _re.sub(r'\s*[-–]\s*(ru|рu)\s*\d+.*', '', name_str, flags=_re.IGNORECASE).strip()
             emp = User.query.filter(User.name.ilike(f'%{clean}%'), User.role=='employee').first()
             if not emp:
                 for word in [w for w in clean.split() if len(w) > 2]:
@@ -658,18 +617,19 @@ def api_import_excel():
                 errors.append(f'Not found: {name_str}')
                 continue
 
-            # clear existing schedule for this employee/month before import
+            # clear old data first if requested
             if clear_first:
                 Schedule.query.filter_by(user_id=emp.id, year=year, month=month).delete()
                 db.session.flush()
 
-            for ci, day_num in date_col_map.items():
-                if ci >= len(row): continue
-                cell_raw = row[ci].value
-                if cell_raw is None: continue
-                code = normalize_shift(cell_raw)
+            # col index 1 = day 1, col index 2 = day 2, ...
+            for day_num in range(1, days_in_month + 1):
+                col_idx = day_num   # col B=1→day1, col C=2→day2, ...
+                if col_idx >= len(row): break
+                code = norm(row[col_idx].value)
                 if not code:
-                    unrecognized.add(str(cell_raw).strip())
+                    if row[col_idx].value not in (None, ''):
+                        unrecognized.add(str(row[col_idx].value).strip())
                     continue
                 s = Schedule.query.filter_by(user_id=emp.id, year=year, month=month, day=day_num).first()
                 if s:   s.shift_code = code
@@ -677,7 +637,7 @@ def api_import_excel():
                 updated += 1
 
         db.session.commit()
-        warn = f'Unrecognized values: {", ".join(list(unrecognized)[:8])}' if unrecognized else ''
+        warn = f'Unknown values: {", ".join(list(unrecognized)[:8])}' if unrecognized else ''
         return jsonify(ok=True, updated=updated, errors=errors, warning=warn)
     except Exception as e:
         import traceback
