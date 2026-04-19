@@ -558,99 +558,124 @@ def api_import_excel():
     f = request.files.get('file')
     if not f: return jsonify(ok=False, error='No file'), 400
     try:
-        wb = openpyxl.load_workbook(f, data_only=True)
-        ws = wb.active
-        year  = int(request.form.get('year',  datetime.utcnow().year))
-        month = int(request.form.get('month', datetime.utcnow().month))
         import calendar as _cal, re as _re
         from datetime import datetime as _dt, date as _date
+
+        wb  = openpyxl.load_workbook(f, data_only=True)
+        ws  = wb.active
+        year  = int(request.form.get('year',  datetime.utcnow().year))
+        month = int(request.form.get('month', datetime.utcnow().month))
         days_in_month = _cal.monthrange(year, month)[1]
 
-        def cell_day(cell):
-            """Return day number if cell contains a date for target month, else None."""
-            v = cell.value
-            # Excel date object
+        # ── Read ALL rows into memory ──
+        all_rows = list(ws.iter_rows())
+
+        # ── Step 1: find header row with day-numbers ──
+        def extract_day(v):
+            if v is None: return None
             if isinstance(v, (_dt, _date)):
-                if v.month == month and v.year == year:
-                    return v.day
-                return None
-            # string like "4/1", "4/19"
-            s = str(v or '').strip()
-            m = _re.match(r'^\d+/(\d+)$', s)
+                return v.day if (v.month == month) else None
+            if isinstance(v, (int, float)):
+                d = int(v); return d if 1 <= d <= 31 else None
+            s = str(v).strip()
+            m = _re.match(r'^(\d{1,2})[/\-.](\d{1,2})', s)
             if m:
-                return int(m.group(1))
-            # plain integer day number
+                # could be M/D or D/M — pick the one ≤ days_in_month
+                a, b = int(m.group(1)), int(m.group(2))
+                if a == month and 1 <= b <= days_in_month: return b
+                if b == month and 1 <= a <= days_in_month: return a
+                if 1 <= b <= days_in_month: return b
             m2 = _re.match(r'^(\d{1,2})$', s)
             if m2:
-                d = int(m2.group(1))
-                if 1 <= d <= days_in_month:
-                    return d
+                d = int(m2.group(1)); return d if 1 <= d <= days_in_month else None
             return None
 
-        # ── Step 1: detect header row & build col_index→day map ──
-        date_col_map = {}
-        header_row_idx = 0
-        for ri, row in enumerate(ws.iter_rows(max_row=5)):
+        date_col_map = {}   # col_index(0-based) → day_number
+        header_ri    = 0
+        for ri, row in enumerate(all_rows[:5]):
             tmp = {}
             for cell in row:
-                d = cell_day(cell)
-                if d:
-                    tmp[cell.column - 1] = d
-            if len(tmp) >= 5:  # need at least 5 date columns to trust it
+                d = extract_day(cell.value)
+                if d: tmp[cell.column - 1] = d
+            if len(tmp) >= 5:
                 date_col_map = tmp
-                header_row_idx = ri
+                header_ri    = ri
                 break
 
-        # fallback: col index = day number (col B=1, col C=2…)
+        # fallback: column B=day1, C=day2, …
         if not date_col_map:
             date_col_map = {i: i for i in range(1, days_in_month + 1)}
-            header_row_idx = 0
+            header_ri    = 0
 
-        updated = 0
-        errors  = []
-        skip_rows = header_row_idx + 2  # skip date-header + weekday-name row
+        # ── Step 2: skip header row + 1 weekday-name row ──
+        emp_rows = all_rows[header_ri + 2:]   # 0-indexed list slicing
 
-        for row in ws.iter_rows(min_row=skip_rows + 1):
-            name_val = row[0].value
-            if not name_val: continue
-            name_str = str(name_val).strip()
-            if len(name_str) < 2: continue
-            if name_str.lower() in ('mon','tue','wed','thu','fri','sat','sun','пн','вт','ср','чт','пт','сб','вс'):
-                continue
+        SKIP = {'mon','tue','wed','thu','fri','sat','sun',
+                'пн','вт','ср','чт','пт','сб','вс'}
 
-            clean_name = name_str.split('-')[0].strip()
-            emp = User.query.filter(User.name.ilike(f'%{clean_name}%'), User.role=='employee').first()
+        def normalize_shift(raw):
+            """Try multiple normalizations to find a EXCEL_MAP match."""
+            if not raw: return None
+            val = str(raw).strip().lower()
+            # direct
+            code = EXCEL_MAP.get(val)
+            if code: return code
+            # collapse multiple spaces
+            val2 = _re.sub(r'\s+', ' ', val)
+            code = EXCEL_MAP.get(val2)
+            if code: return code
+            # strip leading number prefix like "12", "8"
+            val3 = _re.sub(r'^\d+\s*', '', val2).strip()
+            code = EXCEL_MAP.get(val3)
+            if code: return code
+            # replace latin look-alike letters (o→о, c→с)
+            val4 = val2.replace('o','о').replace('c','с').replace('e','е')
+            code = EXCEL_MAP.get(val4)
+            if code: return code
+            val5 = _re.sub(r'^\d+\s*', '', val4).strip()
+            return EXCEL_MAP.get(val5)
+
+        updated      = 0
+        errors       = []
+        unrecognized = set()
+
+        for row in emp_rows:
+            if not row: continue
+            name_raw = row[0].value
+            if not name_raw: continue
+            name_str = str(name_raw).strip()
+            if len(name_str) < 2 or name_str.lower() in SKIP: continue
+
+            # find employee
+            clean = name_str.split('-')[0].strip()
+            emp = User.query.filter(User.name.ilike(f'%{clean}%'), User.role=='employee').first()
             if not emp:
-                words = [w for w in clean_name.split() if len(w) > 2]
-                for word in words:
+                for word in [w for w in clean.split() if len(w) > 2]:
                     emp = User.query.filter(User.name.ilike(f'%{word}%'), User.role=='employee').first()
                     if emp: break
             if not emp:
-                errors.append(f'Employee not found: {name_str}')
+                errors.append(f'Not found: {name_str}')
                 continue
 
-            for col_0idx, day_num in date_col_map.items():
-                if col_0idx >= len(row): continue
-                cell_val = str(row[col_0idx].value or '').strip()
-                if not cell_val: continue
-                val = cell_val.lower()
-                code = EXCEL_MAP.get(val)
+            for ci, day_num in date_col_map.items():
+                if ci >= len(row): continue
+                cell_raw = row[ci].value
+                if cell_raw is None: continue
+                code = normalize_shift(cell_raw)
                 if not code:
-                    # try stripping leading "12" or number prefix
-                    val2 = _re.sub(r'^\d+\s*', '', val).strip()
-                    code = EXCEL_MAP.get(val2)
-                if not code: continue
+                    unrecognized.add(str(cell_raw).strip())
+                    continue
                 s = Schedule.query.filter_by(user_id=emp.id, year=year, month=month, day=day_num).first()
-                if s:
-                    s.shift_code = code
-                else:
-                    db.session.add(Schedule(user_id=emp.id, year=year, month=month, day=day_num, shift_code=code))
+                if s:   s.shift_code = code
+                else:   db.session.add(Schedule(user_id=emp.id, year=year, month=month, day=day_num, shift_code=code))
                 updated += 1
 
         db.session.commit()
-        return jsonify(ok=True, updated=updated, errors=errors)
+        warn = f'Unrecognized values: {", ".join(list(unrecognized)[:8])}' if unrecognized else ''
+        return jsonify(ok=True, updated=updated, errors=errors, warning=warn)
     except Exception as e:
-        return jsonify(ok=False, error=str(e))
+        import traceback
+        return jsonify(ok=False, error=str(e), trace=traceback.format_exc())
 
 # ─────────────────────────────────────────────
 # API — REQUESTS
