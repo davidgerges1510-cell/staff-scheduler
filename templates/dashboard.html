@@ -216,7 +216,10 @@ main{margin-left:240px;padding:24px;min-height:100vh}
     <div class="card">
       <div class="ct">
         <div class="ct-l">👥 Employees</div>
-        <button class="btn bp bsm" onclick="openModal('mAddEmp')">+ Add Employee</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn bsm" style="background:#e2e8f0;color:#4a5568" onclick="toggleReorder()">↕️ Reorder</button>
+          <button class="btn bp bsm" onclick="openModal('mAddEmp')">+ Add Employee</button>
+        </div>
       </div>
       <div class="tw"><table class="et" id="empTable">
         <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Department</th>
@@ -817,16 +820,32 @@ function stat(ico,bg,val,lbl){
 // ─────────────────────────────────────────────
 // EMPLOYEES (admin)
 // ─────────────────────────────────────────────
+var reorderMode = false;
+var empOrder = [];
+function toggleReorder(){
+  reorderMode = !reorderMode;
+  loadEmployees();
+  toast(reorderMode ? '↕️ Drag rows to reorder, then click Save Order' : 'Reorder mode off');
+}
+function saveOrder(){
+  api('POST','/api/users/reorder',{order: empOrder}).then(function(r){
+    if(r.ok){ toast('✅ Order saved!','ok'); reorderMode=false; loadEmployees(); }
+    else toast(r.error||'Error','err');
+  });
+}
 function loadEmployees(){
   api('GET','/api/users').then(function(users){
     ALL_USERS = users;
     var emps = users.filter(function(u){return u.role==='employee';});
+    empOrder = emps.map(function(u){return u.id;});
     api('GET','/api/requests?status=pending').then(function(reqs){
       var pcount = {};
       reqs.forEach(function(r){pcount[r.user_id]=(pcount[r.user_id]||0)+1;});
-      document.getElementById('empBody').innerHTML = emps.map(function(u){
-        return '<tr>'
+      var rows = emps.map(function(u, idx){
+        var drag = reorderMode ? 'draggable="true" ondragstart="dragStart(event,'+idx+')" ondragover="dragOver(event)" ondrop="dropRow(event,'+idx+')" style="cursor:grab"' : '';
+        return '<tr '+drag+' data-idx="'+idx+'">'
           + '<td><div style="display:flex;align-items:center;gap:7px">'
+          + (reorderMode ? '<span style="font-size:16px;color:#a0aec0">⠿</span>' : '')
           + '<div class="ea" style="background:'+u.color+'">'+u.initials+'</div>'
           + '<b>'+u.name+'</b></div></td>'
           + '<td><code>'+u.username+'</code></td>'
@@ -836,13 +855,33 @@ function loadEmployees(){
           + '<td>'+u.sick_days+' days</td>'
           + '<td>'+(pcount[u.id]?'<span class="stb stpending">'+pcount[u.id]+'</span>':'—')+'</td>'
           + '<td><div style="display:flex;gap:5px;flex-wrap:wrap">'
-          + '<button class="btn bgr bsm" onclick="openEdit('+u.id+')">✏️ Edit</button>'
+          + (reorderMode ? '<button class="btn bp bsm" onclick="saveOrder()">💾 Save Order</button>' :
+            '<button class="btn bgr bsm" onclick="openEdit('+u.id+')">✏️ Edit</button>'
           + '<button class="btn bgr bsm" onclick="openSetPw('+u.id+')">🔑 Password</button>'
-          + '<button class="btn bdan bsm" onclick="deleteEmp('+u.id+',\''+u.name+'\')">🗑️</button>'
+          + '<button class="btn bdan bsm" onclick="deleteEmp('+u.id+',\''+u.name+'\')">🗑️</button>')
           + '</div></td></tr>';
-      }).join('');
+      });
+      document.getElementById('empBody').innerHTML = rows.join('');
     });
   });
+}
+var dragSrcIdx = null;
+function dragStart(e, idx){ dragSrcIdx = idx; e.dataTransfer.effectAllowed='move'; }
+function dragOver(e){ e.preventDefault(); e.dataTransfer.dropEffect='move'; }
+function dropRow(e, idx){
+  e.preventDefault();
+  if(dragSrcIdx === null || dragSrcIdx === idx) return;
+  var moved = empOrder.splice(dragSrcIdx, 1)[0];
+  empOrder.splice(idx, 0, moved);
+  dragSrcIdx = null;
+  // re-render with new order
+  var tbody = document.getElementById('empBody');
+  var rows = Array.from(tbody.querySelectorAll('tr'));
+  var srcRow = rows[dragSrcIdx < idx ? dragSrcIdx : dragSrcIdx];
+  // rebuild by reordering ALL_USERS
+  var ordered = empOrder.map(function(id){ return ALL_USERS.find(function(u){return u.id===id;}); });
+  ALL_USERS = ALL_USERS.filter(function(u){return u.role!=='employee';}).concat(ordered);
+  loadEmployees();
 }
 function openEdit(uid){
   var u = ALL_USERS.find(function(x){return x.id===uid;});
