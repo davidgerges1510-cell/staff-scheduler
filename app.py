@@ -815,10 +815,26 @@ def seed_db():
 # ─────────────────────────────────────────────
 # STARTUP
 # ─────────────────────────────────────────────
+def upgrade_db():
+    """Add missing columns to existing database (safe migration)"""
+    cols = [
+        ('day_hours',   'ALTER TABLE "user" ADD COLUMN day_hours FLOAT DEFAULT 12.0'),
+        ('night_hours', 'ALTER TABLE "user" ADD COLUMN night_hours FLOAT DEFAULT 12.0'),
+    ]
+    with db.engine.connect() as conn:
+        for col, sql in cols:
+            try:
+                conn.execute(db.text(sql))
+                conn.commit()
+                print(f"✅ Added column {col}")
+            except Exception:
+                conn.rollback()
+
 try:
     with app.app_context():
         os.makedirs(os.path.join(basedir, 'instance'), exist_ok=True)
         db.create_all()
+        upgrade_db()
         seed_db()
         print("✅ Database initialized successfully")
 except Exception as _startup_err:
