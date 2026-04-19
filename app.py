@@ -487,7 +487,13 @@ def api_update_shift():
     month= int(d.get('month'))
     day  = int(d.get('day'))
     code  = d.get('shift_code','DOF')
-    hrs   = d.get('hours')   # optional custom hours
+    hrs   = d.get('hours')
+    # Special: BLANK = delete the entry (show empty cell)
+    if code == 'BLANK':
+        s = Schedule.query.filter_by(user_id=uid, year=year, month=month, day=day).first()
+        if s: db.session.delete(s)
+        db.session.commit()
+        return jsonify(ok=True)
     if code not in SHIFTS: return jsonify(ok=False, error='Invalid shift'), 400
     s = Schedule.query.filter_by(user_id=uid, year=year, month=month, day=day).first()
     if s:
@@ -498,6 +504,20 @@ def api_update_shift():
                                 hours=float(hrs) if hrs not in (None,'') else None))
     db.session.commit()
     return jsonify(ok=True)
+
+@app.route('/api/schedule/clear-month', methods=['POST'])
+@admin_required
+def api_clear_month():
+    """Clear ALL schedule entries for a given month"""
+    d     = request.get_json()
+    year  = int(d.get('year'))
+    month = int(d.get('month'))
+    uid   = d.get('user_id')   # optional: if set, clear only that employee
+    q = Schedule.query.filter_by(year=year, month=month)
+    if uid: q = q.filter_by(user_id=uid)
+    deleted = q.delete()
+    db.session.commit()
+    return jsonify(ok=True, deleted=deleted)
 
 # ─────────────────────────────────────────────
 # API — EMPLOYEE SELF-EDIT SCHEDULE
@@ -527,31 +547,40 @@ def api_my_schedule_update():
 # ─────────────────────────────────────────────
 EXCEL_MAP = {
     # Day
-    'д': 'D', '12 д': 'D', '12д': 'D', '12 д.': 'D',
+    'д': 'D', '12 д': 'D', '12д': 'D', '12 д.': 'D', 'd': 'D', '12d': 'D', '12 d': 'D',
     # Night
     'н': 'N', '12 н': 'N', '12н': 'N', '12 н.': 'N',
-    # Day Senior — all Cyrillic/Latin combos
+    # Day Senior — all Cyrillic/Latin/no-space combos
     '12д сс': 'DSS', '12 д сс': 'DSS', 'д сс': 'DSS',
+    '12дсс': 'DSS', 'дсс': 'DSS',
     '12д cc': 'DSS', '12 д cc': 'DSS', 'д cc': 'DSS',
+    '12дcc': 'DSS', 'дcc': 'DSS',
     '12д сc': 'DSS', '12д cс': 'DSS',
     '12д ss': 'DSS', '12 д ss': 'DSS', 'д ss': 'DSS',
-    # Night Senior — all Cyrillic/Latin combos
+    '12дss': 'DSS', 'дss': 'DSS',
+    # Night Senior — all Cyrillic/Latin/no-space combos
     '12н сс': 'NSS', '12 н сс': 'NSS', 'н сс': 'NSS',
+    '12нсс': 'NSS', 'нсс': 'NSS',
     '12н cc': 'NSS', '12 н cc': 'NSS', 'н cc': 'NSS',
+    '12нcc': 'NSS', 'нcc': 'NSS',
     '12н сc': 'NSS', '12н cс': 'NSS',
     '12н ss': 'NSS', '12 н ss': 'NSS', 'н ss': 'NSS',
+    '12нss': 'NSS', 'нss': 'NSS',
     # Day Trainee
     '12д/с': 'DS', '12 д/с': 'DS', 'д/с': 'DS', '12л/с': 'DS', '12 л/с': 'DS',
+    '12д/c': 'DS', 'д/c': 'DS', '12д/s': 'DS',
     # Night Trainee
     '12н/с': 'NS', '12 н/с': 'NS', 'н/с': 'NS',
+    '12н/c': 'NS', 'н/c': 'NS', '12н/s': 'NS',
     # Sick
     'б/л': 'BL', 'бл': 'BL', 'б/л.': 'BL',
     # Vacation paid
-    'о/о': 'OO', 'оо': 'OO', 'о/о.': 'OO',
+    'о/о': 'OO', 'оо': 'OO', 'о/о.': 'OO', 'o/o': 'OO',
     # Vacation unpaid / personal
     'о/с': 'OS', 'ос': 'OS', 'o/c': 'OS', 'o/с': 'OS', 'о/c': 'OS',
     # Day Off
     'д/оф': 'DOF', 'доф': 'DOF', 'д/оф.': 'DOF',
+    'д/оф ': 'DOF', 'д/оф.': 'DOF',
 }
 
 @app.route('/api/schedule/import', methods=['POST'])
@@ -576,18 +605,26 @@ def api_import_excel():
 
         # ── Read all rows ──
         all_rows = list(ws.iter_rows())
-        if len(all_rows) < 3:
+        if len(all_rows) < 2:
             return jsonify(ok=False, error='File too short')
 
-        # ── Structure: row1=dates, row2=weekday names, row3+=employees ──
-        # col A (index 0) = name, col B (index 1) = day 1, col C = day 2 ...
-        SKIP = {'mon','tue','wed','thu','fri','sat','sun',
-                'пн','вт','ср','чт','пт','сб','вс'}
+        SKIP_WORDS = {'mon','tue','wed','thu','fri','sat','sun',
+                      'пн','вт','ср','чт','пт','сб','вс',
+                      'monday','tuesday','wednesday','thursday','friday','saturday','sunday'}
+
+        def clean_str(val):
+            """Convert cell value to clean lowercase string."""
+            if val is None: return ''
+            s = str(val).strip().lower()
+            # normalize unicode: replace NBSP and other whitespace
+            s = s.replace('\xa0', ' ').replace('\u200b', '')
+            s = _re.sub(r'\s+', ' ', s).strip()
+            return s
 
         def norm(raw):
             if raw is None: return None
-            v = str(raw).strip().lower()
-            v = _re.sub(r'\s+', ' ', v)  # normalize spaces
+            v = clean_str(raw)
+            if not v: return None
             # 1. direct lookup
             c = EXCEL_MAP.get(v)
             if c: return c
@@ -597,45 +634,79 @@ def api_import_excel():
                    .replace('h','н').replace('b','в').replace('m','м'))
             c = EXCEL_MAP.get(v2)
             if c: return c
-            # 3. strip leading digits and retry
+            # 3. strip leading "12 " or "12" prefix and retry
             v3 = _re.sub(r'^\d+\s*', '', v2).strip()
             c = EXCEL_MAP.get(v3)
             if c: return c
             v4 = _re.sub(r'^\d+\s*', '', v).strip()
             c = EXCEL_MAP.get(v4)
             if c: return c
-            # 5. Pattern-based matching (handles any spacing/encoding combo)
-            # Normalize: remove digits, collapse spaces, apply Cyrillic replacement
+            # 4. Pattern-based matching (handles any encoding / spacing combo)
             vp = _re.sub(r'\d+', '', v2).strip()
             vp = _re.sub(r'\s+', ' ', vp).strip()
-            # Senior markers: сс ss cc sc cs
-            is_senior   = bool(_re.search(r'с\s*с|s\s*s|c\s*c|с\s*c|c\s*с', vp))
-            # Trainee marker: /с  /c  /s
-            is_trainee  = bool(_re.search(r'[/\\]\s*[сcs]', vp))
-            # Day marker: starts with д or д after stripping
-            is_day      = bool(_re.search(r'^[^\н]*д', vp))
-            # Night marker: starts with н
-            is_night    = bool(_re.search(r'^н|^\s*н', vp))
+            is_senior  = bool(_re.search(r'[сc][сc]|ss', vp))
+            is_trainee = bool(_re.search(r'[/\\][сcs]', vp))
+            is_dof     = bool(_re.search(r'[оo][фf]', vp))
+            is_day     = bool(_re.match(r'д', vp))
+            is_night   = bool(_re.match(r'н', vp))
+            if is_dof:   return 'DOF'
             if is_senior:
                 if is_day:   return 'DSS'
                 if is_night: return 'NSS'
             if is_trainee:
                 if is_day:   return 'DS'
                 if is_night: return 'NS'
-            # Basic fallback: pure д or н
-            if _re.match(r'^д$', vp): return 'D'
-            if _re.match(r'^н$', vp): return 'N'
+            if _re.match(r'^д\s*$', vp): return 'D'
+            if _re.match(r'^н\s*$', vp): return 'N'
             return None
+
+        # ── Auto-detect col→day mapping from header rows ──
+        # Find the row that has sequential day numbers (1,2,3...N)
+        col_to_day = {}
+        data_start_row = 2   # default: skip 2 header rows
+        for ri, row in enumerate(all_rows[:5]):  # check first 5 rows
+            day_cols = {}
+            for ci, cell in enumerate(row):
+                val = cell.value
+                try:
+                    if val is None: continue
+                    if hasattr(val, 'day'):   # datetime object
+                        d = val.day
+                    else:
+                        sv = str(val).strip()
+                        # handle "4/1" → take last part after /
+                        sv = sv.split('/')[-1].split('-')[-1].strip()
+                        d = int(float(sv))
+                    if 1 <= d <= 31:
+                        day_cols[ci] = d
+                except:
+                    pass
+            # If we found at least 20 day columns → this is the date header row
+            if len(day_cols) >= 20:
+                col_to_day = day_cols
+                data_start_row = ri + 2  # employee rows start after date row + 1 more header
+                break
+
+        # Fallback: col B (index 1) = day 1
+        if not col_to_day:
+            col_to_day = {i: i for i in range(1, days_in_month + 1)}
+            data_start_row = 2
 
         updated      = 0
         errors       = []
-        unrecognized = set()
+        unrecognized = {}   # {emp_name: {day: raw_val}}
+        debug_rows   = []   # first 3 employees raw cells for debugging
 
-        for row in all_rows[2:]:   # skip row1 (dates) and row2 (weekday names)
+        for row in all_rows[data_start_row:]:
             name_raw = row[0].value
             if not name_raw: continue
             name_str = str(name_raw).strip()
-            if len(name_str) < 2 or name_str.lower() in SKIP: continue
+            if len(name_str) < 2 or name_str.lower() in SKIP_WORDS: continue
+            # skip rows where first cell looks like a number/date
+            try:
+                float(name_str.replace('/', '').replace('-', ''))
+                continue  # it's a number → skip
+            except: pass
 
             # find employee by name
             clean = _re.sub(r'\s*[-–]\s*(ru|рu)\s*\d+.*', '', name_str, flags=_re.IGNORECASE).strip()
@@ -653,23 +724,35 @@ def api_import_excel():
                 Schedule.query.filter_by(user_id=emp.id, year=year, month=month).delete()
                 db.session.flush()
 
-            # col index 1 = day 1, col index 2 = day 2, ...
-            for day_num in range(1, days_in_month + 1):
-                col_idx = day_num   # col B=1→day1, col C=2→day2, ...
-                if col_idx >= len(row): break
-                code = norm(row[col_idx].value)
+            # read shifts using col_to_day mapping
+            raw_cells = {}
+            for col_idx, day_num in col_to_day.items():
+                if col_idx >= len(row): continue
+                if day_num < 1 or day_num > days_in_month: continue
+                cell_val = row[col_idx].value
+                raw_cells[str(day_num)] = str(cell_val) if cell_val is not None else ''
+                code = norm(cell_val)
                 if not code:
-                    if row[col_idx].value not in (None, ''):
-                        unrecognized.add(str(row[col_idx].value).strip())
+                    if cell_val not in (None, '') and str(cell_val).strip():
+                        unrecognized.setdefault(emp.name, {})[str(day_num)] = str(cell_val).strip()
                     continue
                 s = Schedule.query.filter_by(user_id=emp.id, year=year, month=month, day=day_num).first()
                 if s:   s.shift_code = code
                 else:   db.session.add(Schedule(user_id=emp.id, year=year, month=month, day=day_num, shift_code=code))
                 updated += 1
 
+            if len(debug_rows) < 5:
+                debug_rows.append({'name': emp.name, 'cells': raw_cells})
+
         db.session.commit()
-        warn = f'Unknown values: {", ".join(list(unrecognized)[:8])}' if unrecognized else ''
-        return jsonify(ok=True, updated=updated, errors=errors, warning=warn)
+        # Build warning from unrecognized
+        warn_parts = []
+        for ename, days in list(unrecognized.items())[:3]:
+            warn_parts.append(f'{ename}: ' + ', '.join(f'Day{d}="{v}"' for d,v in list(days.items())[:5]))
+        warn = ' | '.join(warn_parts) if warn_parts else ''
+        return jsonify(ok=True, updated=updated, errors=errors, warning=warn,
+                       debug=debug_rows, col_map_size=len(col_to_day),
+                       data_start=data_start_row)
     except Exception as e:
         import traceback
         return jsonify(ok=False, error=str(e), trace=traceback.format_exc())
