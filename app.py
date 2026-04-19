@@ -530,10 +530,16 @@ EXCEL_MAP = {
     'д': 'D', '12 д': 'D', '12д': 'D', '12 д.': 'D',
     # Night
     'н': 'N', '12 н': 'N', '12н': 'N', '12 н.': 'N',
-    # Day Senior
-    '12д сс': 'DSS', '12 д сс': 'DSS', 'д сс': 'DSS', '12д сс.': 'DSS',
-    # Night Senior
-    '12н сс': 'NSS', '12 н сс': 'NSS', 'н сс': 'NSS', '12н сс.': 'NSS',
+    # Day Senior — all Cyrillic/Latin combos
+    '12д сс': 'DSS', '12 д сс': 'DSS', 'д сс': 'DSS',
+    '12д cc': 'DSS', '12 д cc': 'DSS', 'д cc': 'DSS',
+    '12д сc': 'DSS', '12д cс': 'DSS',
+    '12д ss': 'DSS', '12 д ss': 'DSS', 'д ss': 'DSS',
+    # Night Senior — all Cyrillic/Latin combos
+    '12н сс': 'NSS', '12 н сс': 'NSS', 'н сс': 'NSS',
+    '12н cc': 'NSS', '12 н cc': 'NSS', 'н cc': 'NSS',
+    '12н сc': 'NSS', '12н cс': 'NSS',
+    '12н ss': 'NSS', '12 н ss': 'NSS', 'н ss': 'NSS',
     # Day Trainee
     '12д/с': 'DS', '12 д/с': 'DS', 'д/с': 'DS', '12л/с': 'DS', '12 л/с': 'DS',
     # Night Trainee
@@ -581,18 +587,23 @@ def api_import_excel():
         def norm(raw):
             if raw is None: return None
             v = str(raw).strip().lower()
-            # collapse spaces
-            v = _re.sub(r'\s+', ' ', v)
-            # direct lookup
-            c = EXCEL_MAP.get(v)
+            v = _re.sub(r'\s+', ' ', v)  # normalize spaces
+            # 1. direct
+            c = EXCEL_MAP.get(v);
             if c: return c
-            # replace latin letters that look like Cyrillic
-            v2 = v.replace('o','о').replace('c','с').replace('a','а').replace('e','е').replace('x','х')
+            # 2. replace ALL Latin look-alikes with Cyrillic
+            v2 = (v.replace('o','о').replace('c','с').replace('a','а')
+                   .replace('e','е').replace('x','х').replace('p','р')
+                   .replace('h','н').replace('b','в').replace('m','м'))
             c = EXCEL_MAP.get(v2)
             if c: return c
-            # strip leading number (e.g. "12д/с" → "д/с")
+            # 3. strip leading digits
             v3 = _re.sub(r'^\d+\s*', '', v2).strip()
             c = EXCEL_MAP.get(v3)
+            if c: return c
+            # 4. also try on original without latin replacement
+            v4 = _re.sub(r'^\d+\s*', '', v).strip()
+            c = EXCEL_MAP.get(v4)
             if c: return c
             return None
 
