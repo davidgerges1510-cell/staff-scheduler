@@ -660,9 +660,31 @@ def api_test_email():
     u = current_user()
     if not u.email:
         return jsonify(ok=False, error='Admin has no email set'), 400
-    send_email_async(u.email, 'Test — Staff Scheduler',
-                     '<p>✅ Email configuration is working correctly!</p>')
-    return jsonify(ok=True)
+    try:
+        smtp_srv  = AppSettings.get('smtp_server', 'smtp.gmail.com')
+        smtp_port = int(AppSettings.get('smtp_port', '587'))
+        smtp_user = AppSettings.get('smtp_user', '')
+        smtp_pass = AppSettings.get('smtp_pass', '')
+        from_name = AppSettings.get('from_name', 'Staff Scheduler')
+        enabled   = AppSettings.get('email_enabled', 'false') == 'true'
+        if not enabled:
+            return jsonify(ok=False, error='Email is disabled — enable it first')
+        if not smtp_user:
+            return jsonify(ok=False, error='No sender email set')
+        if not smtp_pass:
+            return jsonify(ok=False, error='No App Password set')
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = 'Test — Staff Scheduler'
+        msg['From']    = f'{from_name} <{smtp_user}>'
+        msg['To']      = u.email
+        msg.attach(MIMEText('<p>✅ Email configuration is working!</p>', 'html', 'utf-8'))
+        with smtplib.SMTP(smtp_srv, smtp_port) as srv:
+            srv.ehlo(); srv.starttls(); srv.ehlo()
+            srv.login(smtp_user, smtp_pass)
+            srv.sendmail(smtp_user, u.email, msg.as_string())
+        return jsonify(ok=True, message=f'Email sent to {u.email}')
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
 
 # ─────────────────────────────────────────────
 # API — STATS
