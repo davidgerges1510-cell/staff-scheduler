@@ -307,7 +307,7 @@ main{margin-left:240px;padding:24px;min-height:100vh}
     <div class="card" style="margin-top:16px">
       <div class="ct"><div class="ct-l">📊 Import Excel Schedule</div></div>
       <p style="font-size:13px;color:var(--mu);margin-bottom:12px">Import schedule from Excel file (columns: Name, Day1, Day2, ...)</p>
-      <p style="font-size:12px;color:var(--mu);margin-bottom:12px">Supported codes: <b>д/12 д</b>=Day, <b>н/12 н</b>=Night, <b>б/л</b>=Sick, <b>о/о</b>=Annual, <b>д/оф</b>=DayOff, <b>о/с</b>=Personal</p>
+      <p style="font-size:12px;color:var(--mu);margin-bottom:12px">Codes: <b>12д</b>=Day · <b>12н</b>=Night · <b>12д сс</b>=DaySenior · <b>12н сс</b>=NightSenior · <b>12д/с</b>=DayTrainee · <b>12н/с</b>=NightTrainee · <b>д/оф</b>=DayOff · <b>о/о</b>=Vacation · <b>о/с</b>=VacUnpaid · <b>б/л</b>=Sick</p>
       <div class="g2">
         <div class="fg"><label>Year</label><input type="number" id="impYear" value="2026"></div>
         <div class="fg"><label>Month</label><input type="number" id="impMonth" value="1" min="1" max="12"></div>
@@ -1170,8 +1170,13 @@ function importExcel(){
     .then(function(r){return r.json();})
     .then(function(r){
       if(r.ok){
-        resEl.textContent = '✅ Imported '+r.updated+' shifts!'+(r.errors&&r.errors.length?' Warnings: '+r.errors.join(', '):'');
+        var msg = '✅ Imported '+r.updated+' shifts!';
+        if(r.errors && r.errors.length) msg += '\n⚠️ Not found: '+r.errors.join(', ');
+        if(r.warning) msg += '\n❓ Unknown values: '+r.warning;
+        resEl.style.whiteSpace='pre-line';
+        resEl.textContent = msg;
         resEl.style.display='block';
+        if(r.updated > 0) setTimeout(function(){ navTo('schedule'); }, 1500);
       } else {
         errEl.textContent = r.error||'Import failed';
         errEl.style.display='block';
