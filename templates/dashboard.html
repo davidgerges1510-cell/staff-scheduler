@@ -1385,7 +1385,7 @@ function saveAdminInfo(){
   var email = document.getElementById('adminEmail').value.trim();
   if(!name){ e.textContent='Name is required'; e.style.display='block'; return; }
   api('PUT','/api/users/'+ME.id,{name:name,email:email,username:ME.username,color:ME.color,vac_days:ME.vac_days,sick_days:ME.sick_days}).then(function(r){
-    if(r.id){ ME.name=name; ME.email=email; ok.textContent='✅ Info saved!'; ok.style.display='block'; }
+    if(r.ok){ ME.name=name; ME.email=email; ok.textContent='✅ Info saved!'; ok.style.display='block'; }
     else { e.textContent=r.error||'Error saving'; e.style.display='block'; }
   });
 }
