@@ -253,6 +253,42 @@ def send_email_async(to_email, subject, html_body):
             print(f'[EMAIL ERROR] {e}')
     threading.Thread(target=_send, daemon=True).start()
 
+def notify_admin_new_request(emp, req):
+    """Send email to admin when employee submits a new request."""
+    admin = User.query.filter_by(role='admin').first()
+    if not admin or not admin.email:
+        return
+    type_map = {'leave': '✈️ Leave Request', 'swap': '🔄 Swap Request', 'draft': '✏️ Schedule Proposal'}
+    rtype = type_map.get(req.type, req.type.capitalize())
+    if req.type == 'leave':
+        lt   = LEAVE_TYPES.get(req.leave_type, req.leave_type or 'Leave')
+        detail = f'{lt} — {req.start_date} → {req.end_date} ({req.days_count} days)'
+    elif req.type == 'swap':
+        tu = db.session.get(User, req.target_user_id)
+        detail = f'Swap with {tu.name if tu else "?"} on {req.swap_date}'
+    else:
+        sh = SHIFTS.get(req.proposed_shift, {}).get('name', req.proposed_shift)
+        detail = f'Proposal: {sh} on {req.draft_date}'
+
+    subj = f'⏳ New {rtype} — {emp.name}'
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:linear-gradient(135deg,#1a9e9e,#4A6FA5);padding:24px;border-radius:12px 12px 0 0">
+        <h2 style="color:#fff;margin:0">⏳ New Request Submitted</h2>
+      </div>
+      <div style="padding:24px;background:#f9fafb;border:1px solid #e2e8f0">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <tr><td style="padding:6px 0;color:#718096;width:40%">Employee</td><td style="font-weight:600">{emp.name}</td></tr>
+          <tr><td style="padding:6px 0;color:#718096">Type</td><td>{rtype}</td></tr>
+          <tr><td style="padding:6px 0;color:#718096">Details</td><td>{detail}</td></tr>
+          <tr><td style="padding:6px 0;color:#718096">Reason</td><td>{req.reason or '—'}</td></tr>
+          <tr><td style="padding:6px 0;color:#718096">Submitted</td><td>{datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC</td></tr>
+        </table>
+        <p style="margin-top:16px;font-size:13px;color:#4a5568">Please log in to the system to review and approve or reject this request.</p>
+      </div>
+    </div>"""
+    send_email_async(admin.email, subj, html)
+
 def notify_and_email(emp, req, admin_note=''):
     ok   = req.status == 'approved'
     icon = '✅' if ok else '❌'
@@ -790,6 +826,7 @@ def api_submit_leave():
                    start_date=sd, end_date=ed, days_count=days,
                    reason=d.get('reason',''))
     db.session.add(req); db.session.commit()
+    notify_admin_new_request(u, req)
     return jsonify(ok=True, request=req.to_dict())
 
 @app.route('/api/requests/swap', methods=['POST'])
@@ -811,6 +848,7 @@ def api_submit_swap():
                    target_shift=ts.shift_code if ts else 'DOF',
                    reason=d.get('reason',''))
     db.session.add(req); db.session.commit()
+    notify_admin_new_request(u, req)
     return jsonify(ok=True, request=req.to_dict())
 
 @app.route('/api/requests/draft', methods=['POST'])
@@ -830,6 +868,7 @@ def api_submit_draft():
                    proposed_shift=code, current_shift_code=cur.shift_code if cur else 'DOF',
                    reason=d.get('reason',''))
     db.session.add(req); db.session.commit()
+    notify_admin_new_request(u, req)
     return jsonify(ok=True, request=req.to_dict())
 
 @app.route('/api/requests/<int:rid>/approve', methods=['POST'])
