@@ -292,6 +292,28 @@ main{margin-left:240px;padding:24px;min-height:100vh}
         <button class="btn bgr" onclick="testEmail()">📧 Test Email</button>
       </div>
     </div>
+    <div class="card" style="margin-top:16px">
+      <div class="ct"><div class="ct-l">🔒 Schedule Lock</div></div>
+      <p style="font-size:13px;color:var(--mu);margin-bottom:12px">Lock or unlock employee schedule editing</p>
+      <div id="lockStatus" style="margin-bottom:12px;font-weight:600;font-size:14px"></div>
+      <div style="display:flex;gap:10px">
+        <button class="btn bp" onclick="setScheduleLock(false)">🔓 Unlock Editing</button>
+        <button class="btn bgr" onclick="setScheduleLock(true)">🔒 Lock Editing</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="ct"><div class="ct-l">📊 Import Excel Schedule</div></div>
+      <p style="font-size:13px;color:var(--mu);margin-bottom:12px">Import schedule from Excel file (columns: Name, Day1, Day2, ...)</p>
+      <p style="font-size:12px;color:var(--mu);margin-bottom:12px">Supported codes: <b>д/12 д</b>=Day, <b>н/12 н</b>=Night, <b>б/л</b>=Sick, <b>о/о</b>=Annual, <b>д/оф</b>=DayOff, <b>о/с</b>=Personal</p>
+      <div class="g2">
+        <div class="fg"><label>Year</label><input type="number" id="impYear" value="2026"></div>
+        <div class="fg"><label>Month</label><input type="number" id="impMonth" value="1" min="1" max="12"></div>
+      </div>
+      <div class="fg"><label>Excel File</label><input type="file" id="impFile" accept=".xlsx,.xls"></div>
+      <div id="impResult" class="ok-msg" style="display:none"></div>
+      <div id="impErr" class="err-msg" style="display:none"></div>
+      <button class="btn bp" onclick="importExcel()">📥 Import</button>
+    </div>
   </div>
 
   <!-- ═══════════ CHANGE PASSWORD (ADMIN) ═══════════ -->
@@ -402,25 +424,22 @@ main{margin-left:240px;padding:24px;min-height:100vh}
     </div>
   </div>
 
-  <!-- ═══════════ DRAFT SCHEDULE ═══════════ -->
+  <!-- ═══════════ MY SCHEDULE (EDITABLE) ═══════════ -->
   <div class="view" id="v-draft">
     <div class="card">
       <div class="ct">
-        <div class="ct-l">✏️ Draft Schedule</div>
+        <div class="ct-l">✏️ My Schedule</div>
         <div style="display:flex;gap:6px;align-items:center">
-          <button class="btn bgr bsm" onclick="changeMonth(-1)">◀</button>
-          <span id="draftMonthLabel" style="font-weight:600;font-size:13px;min-width:120px;text-align:center"></span>
-          <button class="btn bgr bsm" onclick="changeMonth(1)">▶</button>
+          <button class="btn bgr bsm" onclick="changeMySchedMonth(-1)">◀</button>
+          <span id="mySchedMonthLabel" style="font-weight:600;font-size:13px;min-width:120px;text-align:center"></span>
+          <button class="btn bgr bsm" onclick="changeMySchedMonth(1)">▶</button>
         </div>
       </div>
-      <p style="font-size:12px;color:var(--mu);margin-bottom:12px">
-        Click any day to propose a shift change. Your manager will review your proposals.</p>
-      <div class="leg" id="draftLeg"></div>
-      <div class="cg" id="draftCal"></div>
-    </div>
-    <div class="card">
-      <div class="ct"><div class="ct-l">My Proposals</div></div>
-      <div id="myDraftList"></div>
+      <div id="mySchedLockMsg" style="display:none;padding:8px 12px;background:#fed7d7;border-radius:8px;font-size:13px;margin-bottom:10px;color:#9b2c2c">🔒 Schedule editing is currently locked by admin.</div>
+      <p style="font-size:12px;color:var(--mu);margin-bottom:8px">Click any day to change your shift directly.</p>
+      <div id="mySchedHours" style="font-size:13px;font-weight:600;color:#2d6a4f;margin-bottom:10px"></div>
+      <div class="leg" id="mySchedLeg"></div>
+      <div class="cg" id="mySchedCal"></div>
     </div>
   </div>
 
@@ -481,6 +500,10 @@ main{margin-left:240px;padding:24px;min-height:100vh}
       <div class="fg"><label>Annual Leave Days</label><input type="number" id="addVac" value="21"></div>
       <div class="fg"><label>Sick Leave Days</label><input type="number" id="addSick" value="14"></div>
     </div>
+    <div class="g2">
+      <div class="fg"><label>Day Shift Hours</label><input type="number" id="addDayH" value="12" step="0.5"></div>
+      <div class="fg"><label>Night Shift Hours</label><input type="number" id="addNightH" value="12" step="0.5"></div>
+    </div>
     <button class="btn bp" style="width:100%" onclick="addEmployee()">✅ Add Employee</button>
   </div>
 </div>
@@ -505,6 +528,10 @@ main{margin-left:240px;padding:24px;min-height:100vh}
     <div class="g2">
       <div class="fg"><label>Annual Leave Days</label><input type="number" id="editVac"></div>
       <div class="fg"><label>Sick Leave Days</label><input type="number" id="editSick"></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Day Shift Hours</label><input type="number" id="editDayH" step="0.5" min="0"></div>
+      <div class="fg"><label>Night Shift Hours</label><input type="number" id="editNightH" step="0.5" min="0"></div>
     </div>
     <button class="btn bp" style="width:100%" onclick="saveEmployee()">💾 Save Changes</button>
   </div>
@@ -829,6 +856,8 @@ function openEdit(uid){
   document.getElementById('editPhone').value    = u.phone||'';
   document.getElementById('editVac').value      = u.vac_days;
   document.getElementById('editSick').value     = u.sick_days;
+  document.getElementById('editDayH').value     = u.day_hours || 12;
+  document.getElementById('editNightH').value   = u.night_hours || 12;
   openModal('mEditEmp');
 }
 function saveEmployee(){
@@ -840,8 +869,10 @@ function saveEmployee(){
     location:  document.getElementById('editLoc').value,
     office:    document.getElementById('editOffice').value,
     phone:     document.getElementById('editPhone').value,
-    vac_days:  document.getElementById('editVac').value,
-    sick_days: document.getElementById('editSick').value,
+    vac_days:   document.getElementById('editVac').value,
+    sick_days:  document.getElementById('editSick').value,
+    day_hours:  parseFloat(document.getElementById('editDayH').value)||12,
+    night_hours:parseFloat(document.getElementById('editNightH').value)||12,
   }).then(function(r){
     if(r.ok){ closeModal('mEditEmp'); loadEmployees(); toast('Employee updated!','ok'); }
     else toast(r.error||'Error','err');
@@ -866,6 +897,8 @@ function addEmployee(){
     phone:      document.getElementById('addPhone').value,
     vac_days:   document.getElementById('addVac').value,
     sick_days:  document.getElementById('addSick').value,
+    day_hours:  parseFloat(document.getElementById('addDayH').value)||12,
+    night_hours:parseFloat(document.getElementById('addNightH').value)||12,
   }).then(function(r){
     if(r.ok){ closeModal('mAddEmp'); loadEmployees(); toast('Employee added!','ok');
       ['addName','addUsername','addPass','addEmail','addDept','addLoc','addOffice','addPhone']
@@ -1040,7 +1073,46 @@ function loadSettings(){
     document.getElementById('setFromName').value     = d.from_name;
     document.getElementById('setDayHours').value     = d.day_hours;
     document.getElementById('setNightHours').value   = d.night_hours;
+    var ls = document.getElementById('lockStatus');
+    if(ls) ls.innerHTML = d.schedule_locked==='true'
+      ? '<span style="color:#e53e3e">🔒 Editing is LOCKED</span>'
+      : '<span style="color:#38a169">🔓 Editing is OPEN</span>';
+    // set current year/month in import
+    var now = new Date();
+    var iy = document.getElementById('impYear');
+    var im = document.getElementById('impMonth');
+    if(iy && !iy.value) iy.value = now.getFullYear();
+    if(im && !im.value) im.value = now.getMonth()+1;
   });
+}
+function setScheduleLock(locked){
+  api('POST','/api/settings',{schedule_locked: locked?'true':'false'}).then(function(r){
+    if(r.ok){ loadSettings(); toast(locked?'🔒 Schedule locked':'🔓 Schedule unlocked','ok'); }
+  });
+}
+function importExcel(){
+  var file = document.getElementById('impFile').files[0];
+  var year = document.getElementById('impYear').value;
+  var month= document.getElementById('impMonth').value;
+  var resEl= document.getElementById('impResult');
+  var errEl= document.getElementById('impErr');
+  resEl.style.display=errEl.style.display='none';
+  if(!file){ errEl.textContent='Please select a file'; errEl.style.display='block'; return; }
+  var fd = new FormData();
+  fd.append('file', file);
+  fd.append('year', year);
+  fd.append('month', month);
+  fetch('/api/schedule/import', {method:'POST', body:fd})
+    .then(function(r){return r.json();})
+    .then(function(r){
+      if(r.ok){
+        resEl.textContent = '✅ Imported '+r.updated+' shifts!'+(r.errors&&r.errors.length?' Warnings: '+r.errors.join(', '):'');
+        resEl.style.display='block';
+      } else {
+        errEl.textContent = r.error||'Import failed';
+        errEl.style.display='block';
+      }
+    });
 }
 function saveSettings(){
   api('POST','/api/settings',{
@@ -1253,22 +1325,101 @@ function submitSwap(){
 // ─────────────────────────────────────────────
 var draftSchedData = null;
 var draftDayReqs   = [];
+var mySchedYear = new Date().getFullYear();
+var mySchedMonth = new Date().getMonth() + 1;
+var mySchedData = null;
+var schedLocked = false;
+
+function changeMySchedMonth(d){
+  mySchedMonth += d;
+  if(mySchedMonth > 12){ mySchedMonth=1; mySchedYear++; }
+  if(mySchedMonth < 1){ mySchedMonth=12; mySchedYear--; }
+  loadDraft();
+}
+
 function loadDraft(){
-  document.getElementById('draftMonthLabel').textContent = monthName(CY, CM);
-  buildLegend('draftLeg');
+  document.getElementById('mySchedMonthLabel').textContent = monthName(mySchedYear, mySchedMonth);
+  buildLegend('mySchedLeg');
   Promise.all([
-    api('GET','/api/schedule/'+CY+'/'+CM),
-    api('GET','/api/requests?type=draft')
+    api('GET','/api/schedule/'+mySchedYear+'/'+mySchedMonth),
+    api('GET','/api/settings')
   ]).then(function(results){
-    draftSchedData = results[0];
-    draftDayReqs   = results[1];
-    var me = draftSchedData.employees.find(function(e){return e.user.id===ME.id;});
-    if(me) renderCalendar('draftCal', draftSchedData, me, true, draftDayReqs);
-    var el = document.getElementById('myDraftList');
-    var myReqs = draftDayReqs.slice().reverse();
-    el.innerHTML = myReqs.length
-      ? myReqs.map(function(r){return reqCard(r,false);}).join('')
-      : '<div style="text-align:center;padding:20px;color:var(--mu)">No proposals yet. Click any day to propose.</div>';
+    mySchedData = results[0];
+    var settings = results[1];
+    schedLocked = settings.schedule_locked === 'true';
+    var lockMsg = document.getElementById('mySchedLockMsg');
+    if(lockMsg) lockMsg.style.display = schedLocked ? 'block' : 'none';
+    var me = mySchedData.employees.find(function(e){return e.user.id===ME.id;});
+    if(!me) return;
+    // calculate hours
+    var dayH = ME.day_hours || 12;
+    var nightH = ME.night_hours || 12;
+    var totalH = 0;
+    Object.values(me.shifts).forEach(function(code){
+      if(code==='D') totalH += dayH;
+      else if(code==='N') totalH += nightH;
+    });
+    var hoursEl = document.getElementById('mySchedHours');
+    if(hoursEl) hoursEl.textContent = '⏱️ Total hours this month: ' + totalH + ' hrs';
+    // render calendar with click handler
+    var cal = document.getElementById('mySchedCal');
+    var days = mySchedData.days;
+    var fw = mySchedData.first_weekday;
+    var today = mySchedData.today;
+    var h = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
+    ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function(d){ h+='<div style="text-align:center;font-size:11px;font-weight:700;color:var(--mu);padding:4px">'+d+'</div>'; });
+    for(var i=0;i<fw;i++) h+='<div></div>';
+    for(var d=1;d<=days;d++){
+      var code = me.shifts[String(d)] || 'DOF';
+      var sh = SHIFTS[code] || SHIFTS['DOF'];
+      var isTod = d===today;
+      h += '<div onclick="mySchedClickDay('+d+')" style="cursor:'+(schedLocked?'default':'pointer')+';border-radius:8px;padding:6px 2px;text-align:center;background:'+sh.bg+';color:'+sh.color+';border:'+( isTod?'2px solid #2d6a4f':'1px solid rgba(0,0,0,.08)')+';font-size:11px">'
+        + '<div style="font-weight:700">'+d+'</div>'
+        + '<div>'+sh.icon+'</div>'
+        + '<div style="font-size:10px">'+code+'</div>'
+        + '</div>';
+    }
+    h += '</div>';
+    cal.innerHTML = h;
+  });
+}
+
+function mySchedClickDay(day){
+  if(schedLocked){ toast('🔒 Editing is locked by admin.','err'); return; }
+  if(!mySchedData) return;
+  var me = mySchedData.employees.find(function(e){return e.user.id===ME.id;});
+  var cur = me ? (me.shifts[String(day)]||'DOF') : 'DOF';
+  // build quick shift picker
+  var opts = Object.keys(SHIFTS).map(function(k){
+    var s = SHIFTS[k];
+    return '<div class="sp-opt'+(k===cur?' sel':'')+'" onclick="applyMyShift('+day+',\''+k+'\')" '
+      +'style="background:'+s.bg+';color:'+s.color+'">'+s.icon+' '+k+' — '+s.name+'</div>';
+  }).join('');
+  var dw = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(mySchedYear,mySchedMonth-1,day).getDay()];
+  document.getElementById('draftLabel').textContent = dw+', '+day+' '+MONTHS[mySchedMonth-1]+' '+mySchedYear;
+  document.getElementById('draftShiftPicker').innerHTML = opts;
+  document.getElementById('draftErr').style.display='none';
+  // hide reason field for direct edit
+  var reasonField = document.querySelector('#mDraft .fg:last-of-type');
+  if(reasonField) reasonField.style.display='none';
+  // change submit button
+  document.getElementById('draftSubmitBtn').textContent='💾 Save';
+  document.getElementById('draftSubmitBtn').onclick = function(){ applyMyShift(day, window._mySelShift||cur); };
+  window._mySchedDay = day;
+  window._mySelShift = cur;
+  openModal('mDraft');
+}
+
+function applyMyShift(day, code){
+  window._mySelShift = code;
+  document.querySelectorAll('.sp-opt').forEach(function(e){e.classList.remove('sel');});
+  event && event.target && event.target.classList.add('sel');
+  api('POST','/api/my-schedule',{year:mySchedYear, month:mySchedMonth, day:day, shift_code:code}).then(function(r){
+    if(r.ok){
+      closeModal('mDraft');
+      loadDraft();
+      toast('✅ Shift saved!','ok');
+    } else { toast(r.error||'Error','err'); }
   });
 }
 function openDraftDay(day){
