@@ -238,6 +238,7 @@ main{margin-left:240px;padding:24px;min-height:100vh}
           <button class="btn bgr bsm" onclick="changeMonth(-1)">◀</button>
           <span id="adMonthLabel" style="font-weight:600;font-size:13px;min-width:120px;text-align:center"></span>
           <button class="btn bgr bsm" onclick="changeMonth(1)">▶</button>
+          <button class="btn bdan bsm" onclick="clearMonthSchedule()" style="margin-left:8px">🗑️ Clear Month</button>
         </div>
       </div>
       <div class="leg" id="schLeg"></div>
@@ -1056,7 +1057,8 @@ function openShiftEdit(uid, day){
   var dw = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(CY,CM-1,day).getDay()];
   var uname = emp ? emp.user.name : 'Employee';
   document.getElementById('shiftLabel').textContent = uname+' — '+dw+', '+day+' '+MONTHS[CM-1]+' '+CY+' (Current: '+cur+')';
-  var h = '';
+  var h = '<div class="sp-opt'+(cur===''||cur==='BLANK'?' sel':'')+'" id="spo-BLANK" onclick="selShift(\'BLANK\')" '
+    + 'style="background:#f1f5f9;color:#94a3b8;border:2px dashed #cbd5e1">⬜ Clear (Empty)</div>';
   Object.keys(SHIFTS).forEach(function(k){
     var s = SHIFTS[k];
     h += '<div class="sp-opt'+(k===cur?' sel':'')+'" id="spo-'+k+'" onclick="selShift(\''+k+'\')" '
@@ -1084,6 +1086,13 @@ function saveShift(){
     hours: hrs !== '' ? parseFloat(hrs) : null
   }).then(function(r){
     if(r.ok){ closeModal('mShift'); loadSchedule(); toast('Shift updated!','ok'); }
+    else toast(r.error||'Error','err');
+  });
+}
+function clearMonthSchedule(){
+  if(!confirm('Clear ALL shifts for '+monthName(CY,CM)+'? This cannot be undone.')) return;
+  api('POST','/api/schedule/clear-month',{year:CY, month:CM}).then(function(r){
+    if(r.ok){ loadSchedule(); toast('✅ Month cleared — '+r.deleted+' entries deleted','ok'); }
     else toast(r.error||'Error','err');
   });
 }
