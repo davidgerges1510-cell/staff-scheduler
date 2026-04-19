@@ -588,23 +588,43 @@ def api_import_excel():
             if raw is None: return None
             v = str(raw).strip().lower()
             v = _re.sub(r'\s+', ' ', v)  # normalize spaces
-            # 1. direct
-            c = EXCEL_MAP.get(v);
+            # 1. direct lookup
+            c = EXCEL_MAP.get(v)
             if c: return c
-            # 2. replace ALL Latin look-alikes with Cyrillic
+            # 2. replace ALL Latin look-alikes → Cyrillic
             v2 = (v.replace('o','о').replace('c','с').replace('a','а')
                    .replace('e','е').replace('x','х').replace('p','р')
                    .replace('h','н').replace('b','в').replace('m','м'))
             c = EXCEL_MAP.get(v2)
             if c: return c
-            # 3. strip leading digits
+            # 3. strip leading digits and retry
             v3 = _re.sub(r'^\d+\s*', '', v2).strip()
             c = EXCEL_MAP.get(v3)
             if c: return c
-            # 4. also try on original without latin replacement
             v4 = _re.sub(r'^\d+\s*', '', v).strip()
             c = EXCEL_MAP.get(v4)
             if c: return c
+            # 5. Pattern-based matching (handles any spacing/encoding combo)
+            # Normalize: remove digits, collapse spaces, apply Cyrillic replacement
+            vp = _re.sub(r'\d+', '', v2).strip()
+            vp = _re.sub(r'\s+', ' ', vp).strip()
+            # Senior markers: сс ss cc sc cs
+            is_senior   = bool(_re.search(r'с\s*с|s\s*s|c\s*c|с\s*c|c\s*с', vp))
+            # Trainee marker: /с  /c  /s
+            is_trainee  = bool(_re.search(r'[/\\]\s*[сcs]', vp))
+            # Day marker: starts with д or д after stripping
+            is_day      = bool(_re.search(r'^[^\н]*д', vp))
+            # Night marker: starts with н
+            is_night    = bool(_re.search(r'^н|^\s*н', vp))
+            if is_senior:
+                if is_day:   return 'DSS'
+                if is_night: return 'NSS'
+            if is_trainee:
+                if is_day:   return 'DS'
+                if is_night: return 'NS'
+            # Basic fallback: pure д or н
+            if _re.match(r'^д$', vp): return 'D'
+            if _re.match(r'^н$', vp): return 'N'
             return None
 
         updated      = 0
