@@ -233,7 +233,7 @@ def send_push_notification(title, message, priority='default'):
     """Send push notification via ntfy.sh"""
     def _push():
         try:
-            topic = AppSettings.get('ntfy_topic', '')
+            topic = AppSettings.get('ntfy_topic', '') or os.environ.get('NTFY_TOPIC', '')
             if not topic: return
             import urllib.request as _ur, json as _json
             data = _json.dumps({
