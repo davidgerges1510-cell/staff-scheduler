@@ -241,16 +241,15 @@ def send_push_notification(title, message, priority='default'):
         try:
             topic = AppSettings.get('ntfy_topic', '') or os.environ.get('NTFY_TOPIC', '')
             if not topic: return
-            import urllib.request as _ur, json as _json
-            data = _json.dumps({
-                'topic':    topic,
-                'title':    title,
-                'message':  message,
-                'priority': priority,
-                'tags':     ['bell']
-            }).encode('utf-8')
-            req = _ur.Request('https://ntfy.sh', data=data,
-                              headers={'Content-Type': 'application/json'})
+            import urllib.request as _ur
+            url = f'https://ntfy.sh/{topic}'
+            req = _ur.Request(url, data=message.encode('utf-8'),
+                              method='POST',
+                              headers={
+                                  'Title': title,
+                                  'Priority': '3',
+                                  'Tags': 'bell'
+                              })
             _ur.urlopen(req, timeout=8)
         except Exception as e:
             print(f'[PUSH ERROR] {e}')
@@ -1048,19 +1047,18 @@ def api_test_push():
     if not topic:
         return jsonify(ok=False, error='No ntfy topic set')
     try:
-        import urllib.request as _ur, json as _json
-        data = _json.dumps({
-            'topic': topic,
-            'title': '✅ Test Notification',
-            'message': 'Staff Scheduler push notifications are working!',
-            'priority': 'default',
-            'tags': ['bell']
-        }).encode('utf-8')
-        req = _ur.Request('https://ntfy.sh', data=data,
-                          headers={'Content-Type': 'application/json'})
+        import urllib.request as _ur
+        url = f'https://ntfy.sh/{topic}'
+        req = _ur.Request(url, data=b'Staff Scheduler: Test notification!',
+                          method='POST',
+                          headers={
+                              'Title': 'Test Notification',
+                              'Priority': '3',
+                              'Tags': 'bell'
+                          })
         resp = _ur.urlopen(req, timeout=10)
         resp_body = resp.read().decode('utf-8')
-        return jsonify(ok=True, message=f'Push sent to: {topic}', response=resp_body)
+        return jsonify(ok=True, message=f'Sent to ntfy.sh/{topic}', response=resp_body)
     except Exception as e:
         return jsonify(ok=False, error=f'ntfy error: {str(e)}')
 
