@@ -569,6 +569,7 @@ main{margin-left:240px;padding:24px;min-height:100vh}
       <div class="fg"><label>Day Shift Hours</label><input type="number" id="editDayH" step="0.5" min="0"></div>
       <div class="fg"><label>Night Shift Hours</label><input type="number" id="editNightH" step="0.5" min="0"></div>
     </div>
+    <div class="fg"><label>📲 ntfy Topic (for push notifications)</label><input id="editNtfy" placeholder="e.g. emp-john-2026"></div>
     <button class="btn bp" style="width:100%" onclick="saveEmployee()">💾 Save Changes</button>
   </div>
 </div>
@@ -946,6 +947,7 @@ function openEdit(uid){
   document.getElementById('editSick').value     = u.sick_days;
   document.getElementById('editDayH').value     = u.day_hours || 12;
   document.getElementById('editNightH').value   = u.night_hours || 12;
+  document.getElementById('editNtfy').value     = u.ntfy_topic || '';
   openModal('mEditEmp');
 }
 function saveEmployee(){
@@ -961,6 +963,7 @@ function saveEmployee(){
     sick_days:  document.getElementById('editSick').value,
     day_hours:  parseFloat(document.getElementById('editDayH').value)||12,
     night_hours:parseFloat(document.getElementById('editNightH').value)||12,
+    ntfy_topic: document.getElementById('editNtfy').value||'',
   }).then(function(r){
     if(r.ok){ closeModal('mEditEmp'); loadEmployees(); toast('Employee updated!','ok'); }
     else toast(r.error||'Error','err');
