@@ -71,6 +71,7 @@ class User(db.Model):
     day_hours    = db.Column(db.Float, default=12.0)
     night_hours  = db.Column(db.Float, default=12.0)
     sort_order   = db.Column(db.Integer, default=0)
+    ntfy_topic   = db.Column(db.String(100), default='')
     is_active    = db.Column(db.Boolean, default=True)
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -98,6 +99,7 @@ class User(db.Model):
                     color=self.color, vac_days=self.vac_days, sick_days=self.sick_days,
                     day_hours=self.day_hours or 12.0, night_hours=self.night_hours or 12.0,
                     sort_order=self.sort_order or 0,
+                    ntfy_topic=self.ntfy_topic or '',
                     initials=self.initials())
 
 
@@ -301,8 +303,9 @@ def notify_admin_new_request(emp, req):
         priority= 'high'
     )
 
-    # Email to admin
-    if not admin or not admin.email: return
+    # Email to admin — use admin profile email or fallback to smtp_user
+    admin_email = (admin.email if admin and admin.email else '') or AppSettings.get('smtp_user', '')
+    if not admin_email: return
     subj = f'⏳ New {rtype} — {emp.name}'
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
@@ -320,7 +323,7 @@ def notify_admin_new_request(emp, req):
         <p style="margin-top:16px;font-size:13px;color:#4a5568">Please log in to the system to review and approve or reject this request.</p>
       </div>
     </div>"""
-    send_email_async(admin.email, subj, html)
+    send_email_async(admin_email, subj, html)
 
 def notify_and_email(emp, req, admin_note=''):
     ok   = req.status == 'approved'
@@ -343,6 +346,18 @@ def notify_and_email(emp, req, admin_note=''):
         msg += f' Note: {admin_note}'
 
     add_notification(emp.id, 'approved' if ok else 'rejected', msg)
+
+    # Push notification to employee if they have ntfy topic
+    if getattr(emp, 'ntfy_topic', ''):
+        try:
+            import urllib.request as _ur
+            url = f'https://ntfy.sh/{emp.ntfy_topic}'
+            _req = _ur.Request(url, data=msg.encode('utf-8'),
+                               method='POST',
+                               headers={'Title': f'Request {word}', 'Priority': '3', 'Tags': 'bell'})
+            _ur.urlopen(_req, timeout=8)
+        except Exception as e:
+            print(f'[PUSH EMP ERROR] {e}')
 
     # Build HTML email
     bal_vac  = max(0, emp.vac_days  - Schedule.query.filter_by(user_id=emp.id, shift_code='OO').count())
@@ -522,6 +537,7 @@ def api_edit_user(uid):
     if 'sick_days'  in d: u.sick_days  = int(d['sick_days'])
     if 'day_hours'  in d: u.day_hours  = float(d['day_hours'])
     if 'night_hours'in d: u.night_hours= float(d['night_hours'])
+    if 'ntfy_topic' in d: u.ntfy_topic = d['ntfy_topic']
     db.session.commit()
     return jsonify(ok=True, user=u.to_dict())
 
@@ -1192,6 +1208,7 @@ def upgrade_db():
         ('night_hours', 'ALTER TABLE "user" ADD COLUMN night_hours FLOAT DEFAULT 12.0'),
         ('sort_order',  'ALTER TABLE "user" ADD COLUMN sort_order INTEGER DEFAULT 0'),
         ('sch_hours',   'ALTER TABLE schedule ADD COLUMN hours FLOAT'),
+        ('ntfy_topic',  'ALTER TABLE "user" ADD COLUMN ntfy_topic VARCHAR(100) DEFAULT \'\''),
     ]
     with db.engine.connect() as conn:
         for col, sql in cols:
