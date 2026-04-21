@@ -229,6 +229,27 @@ def add_notification(user_id, ntype, message):
     db.session.add(Notification(user_id=user_id, type=ntype, message=message))
     db.session.commit()
 
+def send_push_notification(title, message, priority='default'):
+    """Send push notification via ntfy.sh"""
+    def _push():
+        try:
+            topic = AppSettings.get('ntfy_topic', '')
+            if not topic: return
+            import urllib.request as _ur, json as _json
+            data = _json.dumps({
+                'topic':    topic,
+                'title':    title,
+                'message':  message,
+                'priority': priority,
+                'tags':     ['bell']
+            }).encode('utf-8')
+            req = _ur.Request('https://ntfy.sh', data=data,
+                              headers={'Content-Type': 'application/json'})
+            _ur.urlopen(req, timeout=8)
+        except Exception as e:
+            print(f'[PUSH ERROR] {e}')
+    threading.Thread(target=_push, daemon=True).start()
+
 def send_email_async(to_email, subject, html_body):
     def _send():
         try:
@@ -254,22 +275,29 @@ def send_email_async(to_email, subject, html_body):
     threading.Thread(target=_send, daemon=True).start()
 
 def notify_admin_new_request(emp, req):
-    """Send email to admin when employee submits a new request."""
+    """Send email + push notification to admin when employee submits a new request."""
     admin = User.query.filter_by(role='admin').first()
-    if not admin or not admin.email:
-        return
     type_map = {'leave': '✈️ Leave Request', 'swap': '🔄 Swap Request', 'draft': '✏️ Schedule Proposal'}
     rtype = type_map.get(req.type, req.type.capitalize())
     if req.type == 'leave':
-        lt   = LEAVE_TYPES.get(req.leave_type, req.leave_type or 'Leave')
+        lt     = LEAVE_TYPES.get(req.leave_type, req.leave_type or 'Leave')
         detail = f'{lt} — {req.start_date} → {req.end_date} ({req.days_count} days)'
     elif req.type == 'swap':
-        tu = db.session.get(User, req.target_user_id)
+        tu     = db.session.get(User, req.target_user_id)
         detail = f'Swap with {tu.name if tu else "?"} on {req.swap_date}'
     else:
-        sh = SHIFTS.get(req.proposed_shift, {}).get('name', req.proposed_shift)
+        sh     = SHIFTS.get(req.proposed_shift, {}).get('name', req.proposed_shift)
         detail = f'Proposal: {sh} on {req.draft_date}'
 
+    # Push notification (ntfy.sh)
+    send_push_notification(
+        title   = f'⏳ New request — {emp.name}',
+        message = detail,
+        priority= 'high'
+    )
+
+    # Email to admin
+    if not admin or not admin.email: return
     subj = f'⏳ New {rtype} — {emp.name}'
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
@@ -342,6 +370,39 @@ def notify_and_email(emp, req, admin_note=''):
 # ─────────────────────────────────────────────
 # AUTH ROUTES
 # ─────────────────────────────────────────────
+@app.route('/manifest.json')
+def pwa_manifest():
+    from flask import Response
+    manifest = {
+        "name": "Staff Scheduler",
+        "short_name": "Scheduler",
+        "description": "Staff shift scheduling system",
+        "start_url": "/dashboard",
+        "display": "standalone",
+        "background_color": "#f0f4f8",
+        "theme_color": "#1a9e9e",
+        "orientation": "any",
+        "icons": [
+            {"src": "https://img.icons8.com/fluency/192/calendar.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "https://img.icons8.com/fluency/512/calendar.png", "sizes": "512x512", "type": "image/png"}
+        ]
+    }
+    import json as _json
+    return Response(_json.dumps(manifest), mimetype='application/manifest+json')
+
+@app.route('/sw.js')
+def service_worker():
+    from flask import Response
+    sw = """
+self.addEventListener('install', e => self.skipWaiting());
+self.addEventListener('activate', e => clients.claim());
+self.addEventListener('fetch', e => {
+  if(e.request.method !== 'GET') return;
+  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+});
+"""
+    return Response(sw, mimetype='application/javascript')
+
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -958,6 +1019,7 @@ def api_get_settings():
         day_hours    = AppSettings.get('day_hours',   '12'),
         night_hours  = AppSettings.get('night_hours', '12'),
         schedule_locked = AppSettings.get('schedule_locked', 'false'),
+        ntfy_topic   = AppSettings.get('ntfy_topic',  ''),
     )
 
 @app.route('/api/settings', methods=['POST'])
@@ -965,10 +1027,34 @@ def api_get_settings():
 def api_save_settings():
     d = request.get_json()
     for key in ('smtp_server','smtp_port','smtp_user','smtp_pass','from_name',
-                'email_enabled','day_hours','night_hours','schedule_locked'):
+                'email_enabled','day_hours','night_hours','schedule_locked','ntfy_topic'):
         if key in d:
             AppSettings.put(key, d[key])
     return jsonify(ok=True)
+
+@app.route('/api/settings/test-push', methods=['POST'])
+@admin_required
+def api_test_push():
+    topic = AppSettings.get('ntfy_topic', '')
+    if not topic:
+        return jsonify(ok=False, error='No ntfy topic set')
+    send_push_notification('✅ Test Notification', 'Staff Scheduler push notifications are working!', 'default')
+    return jsonify(ok=True, message=f'Push sent to topic: {topic}')
+
+@app.route('/api/requests/apply-approved', methods=['POST'])
+@admin_required
+def api_apply_approved_drafts():
+    """Apply all approved draft requests to the actual schedule"""
+    drafts = Request.query.filter_by(type='draft', status='approved').all()
+    applied = 0
+    for req in drafts:
+        dd = req.draft_date
+        s  = Schedule.query.filter_by(user_id=req.user_id, year=dd.year, month=dd.month, day=dd.day).first()
+        if s: s.shift_code = req.proposed_shift
+        else: db.session.add(Schedule(user_id=req.user_id, year=dd.year, month=dd.month, day=dd.day, shift_code=req.proposed_shift))
+        applied += 1
+    db.session.commit()
+    return jsonify(ok=True, applied=applied)
 
 @app.route('/api/settings/test-email', methods=['POST'])
 @admin_required
