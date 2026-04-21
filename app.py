@@ -202,6 +202,12 @@ def login_required(f):
             if request.is_json:
                 return jsonify(error='Not authenticated'), 401
             return redirect(url_for('login'))
+        u = current_user()
+        if not u:
+            session.clear()
+            if request.is_json:
+                return jsonify(error='Not authenticated'), 401
+            return redirect(url_for('login'))
         return f(*a, **kw)
     return wrapper
 
@@ -417,7 +423,10 @@ def login():
         session['user_id'] = user.id
         return redirect(url_for('dashboard'))
     if 'user_id' in session:
-        return redirect(url_for('dashboard'))
+        u = current_user()
+        if u:
+            return redirect(url_for('dashboard'))
+        session.clear()
     return render_template('login.html')
 
 @app.route('/logout')
