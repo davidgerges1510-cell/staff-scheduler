@@ -1044,11 +1044,25 @@ def api_save_settings():
 @app.route('/api/settings/test-push', methods=['POST'])
 @admin_required
 def api_test_push():
-    topic = AppSettings.get('ntfy_topic', '')
+    topic = AppSettings.get('ntfy_topic', '') or os.environ.get('NTFY_TOPIC', '')
     if not topic:
         return jsonify(ok=False, error='No ntfy topic set')
-    send_push_notification('✅ Test Notification', 'Staff Scheduler push notifications are working!', 'default')
-    return jsonify(ok=True, message=f'Push sent to topic: {topic}')
+    try:
+        import urllib.request as _ur, json as _json
+        data = _json.dumps({
+            'topic': topic,
+            'title': '✅ Test Notification',
+            'message': 'Staff Scheduler push notifications are working!',
+            'priority': 'default',
+            'tags': ['bell']
+        }).encode('utf-8')
+        req = _ur.Request('https://ntfy.sh', data=data,
+                          headers={'Content-Type': 'application/json'})
+        resp = _ur.urlopen(req, timeout=10)
+        resp_body = resp.read().decode('utf-8')
+        return jsonify(ok=True, message=f'Push sent to: {topic}', response=resp_body)
+    except Exception as e:
+        return jsonify(ok=False, error=f'ntfy error: {str(e)}')
 
 @app.route('/api/requests/apply-approved', methods=['POST'])
 @admin_required
