@@ -240,45 +240,48 @@ def add_notification(user_id, ntype, message):
 def send_push_notification(title, message, priority='default'):
     """Send push notification via ntfy.sh"""
     def _push():
-        try:
-            topic = AppSettings.get('ntfy_topic', '') or os.environ.get('NTFY_TOPIC', '')
-            if not topic: return
-            import urllib.request as _ur
-            url = f'https://ntfy.sh/{topic}'
-            req = _ur.Request(url, data=message.encode('utf-8'),
-                              method='POST',
-                              headers={
-                                  'Title': title,
-                                  'Priority': '3',
-                                  'Tags': 'bell'
-                              })
-            _ur.urlopen(req, timeout=8)
-        except Exception as e:
-            print(f'[PUSH ERROR] {e}')
+        with app.app_context():
+            try:
+                topic = AppSettings.get('ntfy_topic', '') or os.environ.get('NTFY_TOPIC', '')
+                if not topic: return
+                import urllib.request as _ur
+                url = f'https://ntfy.sh/{topic}'
+                req = _ur.Request(url, data=message.encode('utf-8'),
+                                  method='POST',
+                                  headers={
+                                      'Title': title,
+                                      'Priority': '3',
+                                      'Tags': 'bell'
+                                  })
+                _ur.urlopen(req, timeout=8)
+            except Exception as e:
+                print(f'[PUSH ERROR] {e}')
     threading.Thread(target=_push, daemon=True).start()
 
 def send_email_async(to_email, subject, html_body):
     def _send():
-        try:
-            smtp_srv  = AppSettings.get('smtp_server', 'smtp.gmail.com')
-            smtp_port = int(AppSettings.get('smtp_port', '587'))
-            smtp_user = AppSettings.get('smtp_user', '')
-            smtp_pass = AppSettings.get('smtp_pass', '')
-            from_name = AppSettings.get('from_name', 'Staff Scheduler')
-            enabled   = AppSettings.get('email_enabled', 'false') == 'true'
-            if not enabled or not smtp_user or not to_email:
-                return
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = subject
-            msg['From']    = f'{from_name} <{smtp_user}>'
-            msg['To']      = to_email
-            msg.attach(MIMEText(html_body, 'html', 'utf-8'))
-            with smtplib.SMTP(smtp_srv, smtp_port) as srv:
-                srv.ehlo(); srv.starttls(); srv.ehlo()
-                srv.login(smtp_user, smtp_pass)
-                srv.sendmail(smtp_user, to_email, msg.as_string())
-        except Exception as e:
-            print(f'[EMAIL ERROR] {e}')
+        with app.app_context():
+            try:
+                smtp_srv  = AppSettings.get('smtp_server', 'smtp.gmail.com')
+                smtp_port = int(AppSettings.get('smtp_port', '587'))
+                smtp_user = AppSettings.get('smtp_user', '')
+                smtp_pass = AppSettings.get('smtp_pass', '')
+                from_name = AppSettings.get('from_name', 'Staff Scheduler')
+                enabled   = AppSettings.get('email_enabled', 'false') == 'true'
+                if not enabled or not smtp_user or not to_email:
+                    return
+                msg = MIMEMultipart('alternative')
+                msg['Subject'] = subject
+                msg['From']    = f'{from_name} <{smtp_user}>'
+                msg['To']      = to_email
+                msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+                with smtplib.SMTP(smtp_srv, smtp_port) as srv:
+                    srv.ehlo(); srv.starttls(); srv.ehlo()
+                    srv.login(smtp_user, smtp_pass)
+                    srv.sendmail(smtp_user, to_email, msg.as_string())
+                print(f'[EMAIL OK] Sent to {to_email}')
+            except Exception as e:
+                print(f'[EMAIL ERROR] {e}')
     threading.Thread(target=_send, daemon=True).start()
 
 def notify_admin_new_request(emp, req):
