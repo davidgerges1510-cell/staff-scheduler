@@ -1117,27 +1117,58 @@ def api_stats():
 def seed_db():
     if User.query.first():
         return
-    admin = User(name='Admin', username='admin', role='admin',
-                 email='', color='#1a9e9e')
-    admin.set_password('')
+    admin = User(name='David Gerges', username='admin', role='admin',
+                 email='davidgerges1510@gmail.com', color='#1a9e9e')
+    admin.set_password('admin123')
     db.session.add(admin)
 
-    sample = [
-        ('Ahmed Al-Salem',   'ahmed',   'ahmed@example.com',  'Operations', 'Site A', 'Office 101', '05012345'),
-        ('Sara Al-Zahrani',  'sara',    'sara@example.com',   'Support',    'Site B', 'Office 102', '05076543'),
-        ('Khalid Al-Otaibi', 'khalid',  'khalid@example.com', 'Technical',  'Site A', 'Office 103', '05098765'),
+    employees = [
+        ('Arakelyan Hayk',      'arakelyan'),
+        ('Pier Nuri',           'pier'),
+        ('Christina Kaprielian','christina'),
+        ('Ahmad Nada',          'ahmad'),
+        ('Rogeh Akobjian',      'rogeh'),
+        ('Jamcosian Sarin',     'jamcosian'),
+        ('Mardigian Nanor',     'mardigian'),
+        ('Kasbar Mike',         'kasbar'),
+        ('Boyajian Nareg',      'boyajian'),
+        ('Obaid Ali',           'obaid'),
+        ('Khalil Rahaj Bilal',  'khalil'),
+        ('Ali Taleb',           'alitaleb'),
     ]
-    for i, (name, uname, email, dept, loc, office, phone) in enumerate(sample):
-        emp = User(name=name, username=uname, email=email, role='employee',
-                   department=dept, location=loc, office=office, phone=phone,
-                   color=COLORS[i % len(COLORS)], shift_pattern=i % len(SHIFT_PATTERNS))
+    emp_objs = []
+    for i, (name, uname) in enumerate(employees):
+        emp = User(name=name, username=uname, email='', role='employee',
+                   color=COLORS[i % len(COLORS)], sort_order=i)
         emp.set_password('pass123')
         db.session.add(emp)
+        emp_objs.append(emp)
     db.session.commit()
 
-    now = datetime.utcnow()
-    for emp in User.query.filter_by(role='employee').all():
-        ensure_schedule(emp, now.year, now.month)
+    # Seed November 2026 schedule from Excel data
+    SCHEDULE_DATA = {
+        'Arakelyan Hayk': {2:'NSS',3:'NSS',4:'DOF',5:'DOF',6:'DSS',7:'DSS',10:'NSS',11:'NSS',15:'DSS',18:'NSS',19:'NSS',22:'DSS',23:'DSS',26:'NSS',27:'NSS',30:'DSS'},
+        'Pier Nuri': {1:'D',2:'D',3:'D',4:'D',5:'D',6:'D',7:'OO',8:'OO',9:'OO',10:'OO',11:'OO',12:'OO',13:'OO',14:'OO',15:'OO',16:'N',17:'N',20:'D',21:'D',22:'D',24:'N',25:'N',28:'D',29:'D',30:'D'},
+        'Christina Kaprielian': {2:'DOF',3:'N',4:'N',7:'N',8:'N',9:'N',11:'N',14:'DOF',15:'D',16:'DOF',17:'D',19:'N',20:'N',23:'D',24:'D',26:'D',29:'DOF',30:'N'},
+        'Ahmad Nada': {2:'D',4:'D',5:'D',6:'D',7:'D',8:'D',10:'D',11:'D',12:'D',13:'D',14:'D',15:'D',17:'D',18:'D',20:'D',21:'D',22:'D',24:'D',25:'D',27:'D',28:'D',29:'D'},
+        'Rogeh Akobjian': {1:'BL',2:'BL',3:'BL',4:'BL',5:'D',6:'N',9:'N',13:'N',16:'N',19:'D',20:'N',22:'N',24:'N',26:'D',27:'N',29:'N',30:'N'},
+        'Jamcosian Sarin': {1:'D',2:'D',4:'D',7:'D',8:'D',10:'D',11:'N',14:'N',15:'N',18:'D',20:'N',23:'D',24:'D',25:'D',27:'D',29:'D',30:'D'},
+        'Mardigian Nanor': {3:'D',4:'D',5:'DOF',6:'D',9:'D',11:'D',12:'D',14:'D',16:'D',17:'D',20:'DOF',21:'D',22:'D',24:'D',25:'D',26:'D',28:'D',31:'D'},
+        'Kasbar Mike': {1:'N',4:'N',5:'N',6:'N',7:'N',8:'N',11:'N',12:'N',13:'N',15:'D',16:'N',18:'D',19:'D',20:'N',21:'N',23:'N',24:'N',25:'N',26:'N',28:'N',29:'N',30:'N'},
+        'Boyajian Nareg': {1:'N',4:'N',5:'N',8:'D',9:'N',12:'N',13:'N',16:'N',17:'N',20:'N',21:'N',24:'N',25:'N',28:'N',29:'N'},
+        'Obaid Ali': {3:'DS',4:'DS',5:'DS',7:'NS',8:'NS',9:'NS',11:'DS',12:'DS',13:'DS',15:'NS',16:'NS',17:'NS',20:'DS',21:'DS',22:'DS',24:'DS',25:'DS',26:'DS',28:'NS',29:'NS'},
+        'Khalil Rahaj Bilal': {2:'DS',3:'DS',6:'NS',7:'NS',8:'NS',10:'NS',11:'NS',13:'NS',14:'NS',16:'DS',17:'DS',20:'NS',21:'NS',23:'NS',24:'NS',25:'NS',27:'NS',28:'NS',30:'NS'},
+        'Ali Taleb': {14:'DS',15:'DS',18:'NS',19:'NS',22:'DS',23:'DS',26:'NS',27:'NS',30:'DS'},
+    }
+    for emp in emp_objs:
+        sched = SCHEDULE_DATA.get(emp.name.strip(), {})
+        for day, shift_code in sched.items():
+            try:
+                s = Schedule(user_id=emp.id, year=2026, month=11, day=day, shift=shift_code)
+                db.session.add(s)
+            except Exception:
+                pass
+    db.session.commit()
 
 # ─────────────────────────────────────────────
 # STARTUP
