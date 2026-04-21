@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#1a9e9e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Staff Scheduler">
+<link rel="manifest" href="/manifest.json">
 <title>Staff Scheduler</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -252,7 +257,10 @@ main{margin-left:240px;padding:24px;min-height:100vh}
   <!-- ═══════════ ALL REQUESTS ═══════════ -->
   <div class="view" id="v-requests">
     <div class="card">
-      <div class="ct"><div class="ct-l">📋 All Requests</div></div>
+      <div class="ct">
+        <div class="ct-l">📋 All Requests</div>
+        <button class="btn bsuc bsm" onclick="applyApprovedDrafts()">✅ Apply Approved Drafts to Schedule</button>
+      </div>
       <div class="tabs">
         <div class="tab on" onclick="setReqFilter('all',this)">All</div>
         <div class="tab" onclick="setReqFilter('pending',this)">⏳ Pending</div>
@@ -291,9 +299,29 @@ main{margin-left:240px;padding:24px;min-height:100vh}
         <div class="fg"><label>Day Shift Hours</label><input id="setDayHours" type="number" placeholder="12"></div>
         <div class="fg"><label>Night Shift Hours</label><input id="setNightHours" type="number" placeholder="12"></div>
       </div>
-      <div style="display:flex;gap:10px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn bp" onclick="saveSettings()">💾 Save Settings</button>
         <button class="btn bgr" onclick="testEmail()">📧 Test Email</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="ct"><div class="ct-l">📲 Push Notifications (Phone)</div></div>
+      <p style="font-size:13px;color:var(--mu);margin-bottom:8px">
+        Get instant notifications on your phone when employees submit requests.<br>
+        Uses <b>ntfy.sh</b> — free, no account needed.
+      </p>
+      <ol style="font-size:12px;color:var(--mu);margin:0 0 12px 18px;line-height:1.8">
+        <li>Install <b>ntfy</b> app on your phone (<a href="https://ntfy.sh" target="_blank" style="color:var(--t)">ntfy.sh</a> — iOS &amp; Android)</li>
+        <li>Open the app → Subscribe to a topic (e.g. <code>staff-david-2026</code>)</li>
+        <li>Enter the same topic name below and save</li>
+      </ol>
+      <div class="fg" style="max-width:360px">
+        <label>ntfy Topic Name</label>
+        <input id="setNtfyTopic" placeholder="e.g. staff-david-2026">
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn bp" onclick="saveSettings()">💾 Save</button>
+        <button class="btn bgr" onclick="testPush()">📲 Test Push</button>
       </div>
     </div>
     <div class="card" style="margin-top:16px">
@@ -1159,6 +1187,8 @@ function loadSettings(){
     document.getElementById('setFromName').value     = d.from_name;
     document.getElementById('setDayHours').value     = d.day_hours;
     document.getElementById('setNightHours').value   = d.night_hours;
+    var nt = document.getElementById('setNtfyTopic');
+    if(nt) nt.value = d.ntfy_topic || '';
     var ls = document.getElementById('lockStatus');
     if(ls) ls.innerHTML = d.schedule_locked==='true'
       ? '<span style="color:#e53e3e">🔒 Editing is LOCKED</span>'
@@ -1230,6 +1260,7 @@ function saveSettings(){
     from_name:     document.getElementById('setFromName').value,
     day_hours:     document.getElementById('setDayHours').value,
     night_hours:   document.getElementById('setNightHours').value,
+    ntfy_topic:    (document.getElementById('setNtfyTopic')||{}).value||'',
   }).then(function(r){
     if(r.ok) toast('Settings saved!','ok'); else toast(r.error,'err');
   });
@@ -1238,6 +1269,19 @@ function testEmail(){
   api('POST','/api/settings/test-email',{}).then(function(r){
     if(r.ok) toast('Test email sent! Check inbox.','ok');
     else toast(r.error||'Failed','err');
+  });
+}
+function testPush(){
+  api('POST','/api/settings/test-push',{}).then(function(r){
+    if(r.ok) toast('📲 Push sent! Check your phone.','ok');
+    else toast(r.error||'Set ntfy topic first','err');
+  });
+}
+function applyApprovedDrafts(){
+  if(!confirm('Apply all approved draft proposals to the actual schedule?')) return;
+  api('POST','/api/requests/apply-approved',{}).then(function(r){
+    if(r.ok){ toast('✅ Applied '+r.applied+' draft(s) to schedule','ok'); loadRequests(); }
+    else toast(r.error||'Error','err');
   });
 }
 
@@ -1695,6 +1739,11 @@ function pollUpdates(){
 // ─────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────
+// Register PWA service worker
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').catch(function(){});
+}
+
 window.addEventListener('DOMContentLoaded', function(){
   buildNav(0, 0);
   // set default dates
