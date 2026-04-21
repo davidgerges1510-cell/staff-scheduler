@@ -1145,6 +1145,21 @@ def api_stats():
 def seed_db():
     if User.query.first():
         return
+    # Seed email settings
+    defaults = {
+        'smtp_server':   'smtp.gmail.com',
+        'smtp_port':     '587',
+        'smtp_user':     'davidgerges1510@gmail.com',
+        'smtp_pass':     'ksux zkdn ulqs wlfu',
+        'from_name':     'David Gerges',
+        'email_enabled': 'true',
+        'day_hours':     '12',
+        'night_hours':   '12',
+        'ntfy_topic':    'staff-david-2026',
+    }
+    for k, v in defaults.items():
+        AppSettings.put(k, v)
+
     admin = User(name='David Gerges', username='admin', role='admin',
                  email='davidgerges1510@gmail.com', color='#1a9e9e')
     admin.set_password('admin123')
