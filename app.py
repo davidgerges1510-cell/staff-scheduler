@@ -1047,6 +1047,7 @@ def api_get_settings():
         night_hours  = AppSettings.get('night_hours', '12'),
         schedule_locked = AppSettings.get('schedule_locked', 'false'),
         ntfy_topic   = AppSettings.get('ntfy_topic',  ''),
+        gsheet_url   = AppSettings.get('gsheet_url',  ''),
     )
 
 @app.route('/api/settings', methods=['POST'])
@@ -1054,10 +1055,106 @@ def api_get_settings():
 def api_save_settings():
     d = request.get_json()
     for key in ('smtp_server','smtp_port','smtp_user','smtp_pass','from_name',
-                'email_enabled','day_hours','night_hours','schedule_locked','ntfy_topic'):
+                'email_enabled','day_hours','night_hours','schedule_locked','ntfy_topic',
+                'gsheet_url'):
         if key in d:
             AppSettings.put(key, d[key])
     return jsonify(ok=True)
+
+# ─────────────────────────────────────────────
+# GOOGLE SHEET LIVE READ
+# ─────────────────────────────────────────────
+# Words/brands to hide or replace in the sheet before showing to users.
+GSHEET_BRAND_REPLACEMENTS = [
+    (r'\bMELBET\s*1\b', 'TEAM B'),
+    (r'\bMELBET\s*2\b', 'TEAM C'),
+    (r'\bMELBET\s*3\b', 'TEAM D'),
+    (r'\bMELBET\b',      'TEAM B'),
+    (r'\b1\s*X\s*BET\b','TEAM A'),
+    (r'\b1XBET\b',        'TEAM A'),
+]
+
+def _extract_gsheet_ids(url):
+    import re
+    if not url:
+        return None, None
+    m = re.search(r'/spreadsheets/d/([a-zA-Z0-9_-]+)', url)
+    if not m:
+        return None, None
+    sid = m.group(1)
+    gid_m = re.search(r'[?&#]gid=(\d+)', url)
+    gid = gid_m.group(1) if gid_m else '0'
+    return sid, gid
+
+def _sanitize_cell(text):
+    import re
+    if not text:
+        return text
+    s = str(text)
+    for pattern, repl in GSHEET_BRAND_REPLACEMENTS:
+        s = re.sub(pattern, repl, s, flags=re.IGNORECASE)
+    return s
+
+def _fetch_gsheet_csv(sheet_id, gid):
+    import urllib.request as _ur
+    import urllib.error as _ue
+    url = f'https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}'
+    req = _ur.Request(url, headers={'User-Agent': 'Mozilla/5.0 StaffScheduler'})
+    try:
+        with _ur.urlopen(req, timeout=15) as resp:
+            data = resp.read()
+        try:
+            return data.decode('utf-8')
+        except UnicodeDecodeError:
+            return data.decode('cp1252', errors='replace')
+    except _ue.HTTPError as e:
+        raise RuntimeError(f'Google returned {e.code}. Make sure the sheet is shared as "Anyone with the link can view".')
+    except Exception as e:
+        raise RuntimeError(f'Could not load sheet: {e}')
+
+@app.route('/api/gsheet')
+@login_required
+def api_gsheet_info():
+    raw = AppSettings.get('gsheet_url', '')
+    sid, gid = _extract_gsheet_ids(raw)
+    return jsonify(
+        raw_url    = raw,
+        configured = bool(sid),
+        sheet_id   = sid or '',
+        gid        = gid or '',
+    )
+
+@app.route('/api/gsheet/data')
+@login_required
+def api_gsheet_data():
+    import csv, io
+    raw = AppSettings.get('gsheet_url', '')
+    sid, gid = _extract_gsheet_ids(raw)
+    if not sid:
+        return jsonify(ok=False, error='No Google Sheet URL configured. Ask the admin to add one in Settings.'), 400
+    try:
+        csv_text = _fetch_gsheet_csv(sid, gid)
+    except RuntimeError as e:
+        return jsonify(ok=False, error=str(e)), 502
+
+    reader = csv.reader(io.StringIO(csv_text))
+    rows = []
+    for row in reader:
+        cleaned = [_sanitize_cell(c) for c in row]
+        if any((c or '').strip() for c in cleaned):
+            rows.append(cleaned)
+
+    max_non_empty = 0
+    for r in rows:
+        last = 0
+        for i, c in enumerate(r):
+            if (c or '').strip():
+                last = i + 1
+        if last > max_non_empty:
+            max_non_empty = last
+    rows = [r[:max_non_empty] for r in rows]
+
+    return jsonify(ok=True, rows=rows, count=len(rows))
 
 @app.route('/api/settings/test-push', methods=['POST'])
 @admin_required
