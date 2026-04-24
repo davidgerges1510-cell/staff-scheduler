@@ -243,9 +243,11 @@ main{margin-left:240px;padding:24px;min-height:100vh}
           <button class="btn bgr bsm" onclick="changeMonth(-1)">◀</button>
           <span id="adMonthLabel" style="font-weight:600;font-size:13px;min-width:120px;text-align:center"></span>
           <button class="btn bgr bsm" onclick="changeMonth(1)">▶</button>
+          <button class="btn bp bsm" onclick="importFromGSheet()" style="margin-left:8px" title="استيراد من Google Sheet">⬇️ Import from Sheet</button>
           <button class="btn bdan bsm" onclick="clearMonthSchedule()" style="margin-left:8px">🗑️ Clear Month</button>
         </div>
       </div>
+      <div id="gsImportStatus" style="display:none;margin:10px 0;padding:10px;border-radius:8px;font-size:13px"></div>
       <div class="leg" id="schLeg"></div>
       <div class="sch-wrap"><table class="sch">
         <thead id="schHead"></thead>
@@ -1850,6 +1852,68 @@ function loadGSheet(){
   }).catch(function(e){
     st.innerHTML = '<span style="color:#e53e3e">Network error loading sheet.</span>';
   });
+}
+
+// ─────────────────────────────────────────────
+// IMPORT SCHEDULE FROM GOOGLE SHEET
+// ─────────────────────────────────────────────
+function importFromGSheet(){
+  var box = document.getElementById('gsImportStatus');
+  var y = window.adYear || new Date().getFullYear();
+  var m = window.adMonth || (new Date().getMonth() + 1);
+  var confirmMsg = 'استيراد الجدول من Google Sheet للشهر ' + m + '/' + y + '؟'
+    + '\n\nسيتم استبدال الورديات الموجودة لهذا الشهر.\n'
+    + 'أسماء البراند (Melbet، linebet، Ru 100، إلخ) سيتم تجاهلها تلقائياً.';
+  if(!confirm(confirmMsg)) return;
+
+  if(box){
+    box.style.display = 'block';
+    box.style.background = '#fffbea';
+    box.style.color = '#744210';
+    box.style.border = '1px solid #f6e05e';
+    box.textContent = '⏳ Fetching from Google Sheet and importing ...';
+  }
+
+  api('POST', '/api/schedule/import-from-gsheet', {year: y, month: m, clear_first: '1'})
+    .then(function(r){
+      if(!r.ok){
+        if(box){
+          box.style.background = '#fff5f5';
+          box.style.color = '#c53030';
+          box.style.border = '1px solid #fc8181';
+          box.innerHTML = '⚠️ ' + escHtml(r.error || 'Import failed');
+        }
+        return;
+      }
+      var html = '✅ <b>تم استيراد ' + r.updated + ' وردية</b> للشهر ' + r.month + '/' + r.year;
+      if(r.matched && r.matched.length){
+        html += '<br><br>👥 الموظفون المستوردون (' + r.matched.length + '): ' + escHtml(r.matched.join(', '));
+      }
+      if(r.skipped && r.skipped.length){
+        html += '<br><br>🚫 تم تجاهلها (تصنيفات وليست موظفين): ' + escHtml(r.skipped.slice(0,8).join(', '));
+        if(r.skipped.length > 8) html += ' ...';
+      }
+      if(r.not_found && r.not_found.length){
+        html += '<br><br>❓ أسماء لم يتم العثور عليها بالتطبيق: <b>' + escHtml(r.not_found.join(', '))
+             + '</b><br><span style="font-size:12px">أضفهم بصفحة Employees أو صحّح الإسم بالشيت.</span>';
+      }
+      if(box){
+        box.style.background = '#f0fff4';
+        box.style.color = '#22543d';
+        box.style.border = '1px solid #68d391';
+        box.innerHTML = html;
+      }
+      // reload current schedule view
+      if(typeof loadSchedule === 'function') loadSchedule();
+    })
+    .catch(function(e){
+      if(box){
+        box.style.background = '#fff5f5';
+        box.style.color = '#c53030';
+        box.style.border = '1px solid #fc8181';
+        box.textContent = '⚠️ Network error: ' + e;
+      }
+    });
 }
 
 </script>
