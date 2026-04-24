@@ -350,6 +350,29 @@ main{margin-left:240px;padding:24px;min-height:100vh}
       <div id="impErr" class="err-msg" style="display:none"></div>
       <button class="btn bp" onclick="importExcel()">📥 Import</button>
     </div>
+    <div class="card" style="margin-top:16px">
+      <div class="ct"><div class="ct-l">🔗 Google Sheet Link (Live View)</div></div>
+      <p style="font-size:13px;color:var(--mu);margin-bottom:10px">Paste the share link of your Google Sheet. Any edits on the sheet will appear automatically on the <b>Live Schedule</b> page.</p>
+      <p style="font-size:12px;color:var(--mu);margin-bottom:12px">Sheet must be set to <b>"Anyone with the link — Viewer"</b>.</p>
+      <div class="fg">
+        <label>Google Sheet URL</label>
+        <input type="text" id="setGsheetUrl" placeholder="https://docs.google.com/spreadsheets/d/..../edit?gid=....">
+      </div>
+      <button class="btn bp" onclick="saveSettings()">💾 Save Link</button>
+    </div>
+  </div>
+
+  <!-- ═══════════ LIVE GOOGLE SHEET VIEW ═══════════ -->
+  <div class="view" id="v-gsheet">
+    <div class="card">
+      <div class="ct">
+        <div class="ct-l">📊 Live Schedule</div>
+        <button class="btn bp" onclick="loadGSheet()" style="padding:6px 14px;font-size:13px">🔄 Refresh</button>
+      </div>
+      <p style="font-size:13px;color:var(--mu);margin-bottom:10px">This view mirrors your Google Sheet in real time. Any change made on the sheet appears here after refresh.</p>
+      <div id="gsheetStatus" style="font-size:13px;color:var(--mu);margin-bottom:10px"></div>
+      <div id="gsheetWrap" style="overflow:auto;max-height:70vh;border:1px solid var(--br);border-radius:10px"></div>
+    </div>
   </div>
 
   <!-- ═══════════ CHANGE PASSWORD (ADMIN) ═══════════ -->
@@ -657,6 +680,7 @@ var ADMIN_NAV = [
   {id:'dashboard',  ico:'🏠', lbl:'Dashboard'},
   {id:'employees',  ico:'👥', lbl:'Employees'},
   {id:'schedule',   ico:'📅', lbl:'Schedule'},
+  {id:'gsheet',     ico:'📊', lbl:'Live Schedule'},
   {id:'requests',   ico:'📋', lbl:'Requests', badge:'pending'},
   {id:'settings',   ico:'⚙️', lbl:'Settings'},
   {id:'password',   ico:'🔑', lbl:'Change Password'},
@@ -664,6 +688,7 @@ var ADMIN_NAV = [
 var EMP_NAV = [
   {id:'my-schedule',   ico:'📅', lbl:'My Schedule'},
   {id:'team',          ico:'👥', lbl:'Team Schedule'},
+  {id:'gsheet',        ico:'📊', lbl:'Live Schedule'},
   {id:'leave',         ico:'✈️', lbl:'Leave Request'},
   {id:'swap',          ico:'🔄', lbl:'Swap Request'},
   {id:'draft',         ico:'✏️', lbl:'Draft Schedule'},
@@ -676,6 +701,7 @@ var PAGE_INFO = {
   'dashboard':     ['Dashboard',        'Team overview and pending requests'],
   'employees':     ['Employees',        'Add, edit and manage staff'],
   'schedule':      ['Schedule Editor',  'Click any cell to change a shift'],
+  'gsheet':        ['Live Schedule',    'Live view from your Google Sheet'],
   'requests':      ['All Requests',     'Review and manage all requests'],
   'settings':      ['Settings',         'Email and shift configuration'],
   'my-schedule':   ['My Schedule',      'Your personal shift calendar'],
@@ -726,6 +752,7 @@ function navTo(id){
     case 'dashboard':    loadDashboard();   break;
     case 'employees':    loadEmployees();   break;
     case 'schedule':     loadSchedule();    break;
+    case 'gsheet':       loadGSheet();      break;
     case 'requests':     loadRequests();    break;
     case 'settings':     loadSettings();    break;
     case 'my-schedule':  loadMySchedule();  break;
@@ -1192,6 +1219,8 @@ function loadSettings(){
     document.getElementById('setNightHours').value   = d.night_hours;
     var nt = document.getElementById('setNtfyTopic');
     if(nt) nt.value = d.ntfy_topic || '';
+    var gs = document.getElementById('setGsheetUrl');
+    if(gs) gs.value = d.gsheet_url || '';
     var ls = document.getElementById('lockStatus');
     if(ls) ls.innerHTML = d.schedule_locked==='true'
       ? '<span style="color:#e53e3e">🔒 Editing is LOCKED</span>'
@@ -1264,6 +1293,7 @@ function saveSettings(){
     day_hours:     document.getElementById('setDayHours').value,
     night_hours:   document.getElementById('setNightHours').value,
     ntfy_topic:    (document.getElementById('setNtfyTopic')||{}).value||'',
+    gsheet_url:    (document.getElementById('setGsheetUrl')||{}).value||'',
   }).then(function(r){
     if(r.ok) toast('Settings saved!','ok'); else toast(r.error,'err');
   });
@@ -1769,6 +1799,59 @@ window.addEventListener('DOMContentLoaded', function(){
   // poll every 15s
   setInterval(pollUpdates, 15000);
 });
+// ─────────────────────────────────────────────
+// LIVE GOOGLE SHEET VIEW
+// ─────────────────────────────────────────────
+function escHtml(s){
+  if(s==null) return '';
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+function loadGSheet(){
+  var st   = document.getElementById('gsheetStatus');
+  var wrap = document.getElementById('gsheetWrap');
+  if(!wrap) return;
+  st.textContent = '⏳ Loading from Google Sheet...';
+  wrap.innerHTML = '';
+  api('GET','/api/gsheet/data').then(function(d){
+    if(!d.ok){
+      st.innerHTML = '<span style="color:#e53e3e">⚠️ '+escHtml(d.error||'Unable to load the sheet')+'</span>';
+      if(d.need_config && IS_ADMIN){
+        st.innerHTML += ' — <a href="#" onclick="navTo(\'settings\');return false;" style="color:var(--pr)">Open Settings</a> to paste the link.';
+      }
+      return;
+    }
+    if(!d.rows || !d.rows.length){
+      st.innerHTML = '<span style="color:#e53e3e">Sheet is empty.</span>';
+      return;
+    }
+    var header = d.rows[0];
+    var body   = d.rows.slice(1);
+    var h = '<table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr>';
+    header.forEach(function(c){
+      h += '<th style="position:sticky;top:0;background:var(--pr);color:#fff;padding:6px 10px;border:1px solid var(--br);text-align:left;white-space:nowrap">'+escHtml(c)+'</th>';
+    });
+    h += '</tr></thead><tbody>';
+    body.forEach(function(row, ri){
+      h += '<tr style="background:'+(ri%2?'#f7fafc':'#fff')+'">';
+      for(var i=0;i<header.length;i++){
+        var v = row[i]==null?'':row[i];
+        h += '<td style="padding:5px 9px;border:1px solid var(--br);white-space:nowrap">'+escHtml(v)+'</td>';
+      }
+      h += '</tr>';
+    });
+    h += '</tbody></table>';
+    wrap.innerHTML = h;
+    var stamp = d.fetched_at ? ' · updated '+d.fetched_at : '';
+    st.innerHTML = '✅ '+body.length+' rows'+stamp;
+  }).catch(function(e){
+    st.innerHTML = '<span style="color:#e53e3e">Network error loading sheet.</span>';
+  });
+}
+
 </script>
 </body>
 </html>
