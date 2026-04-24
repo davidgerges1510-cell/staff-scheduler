@@ -882,6 +882,231 @@ def api_import_excel():
         return jsonify(ok=False, error=str(e), trace=traceback.format_exc())
 
 # ─────────────────────────────────────────────
+# GSHEET → SCHEDULE IMPORT
+# ─────────────────────────────────────────────
+# Rows / cells containing these labels are silently skipped during import.
+GSHEET_IGNORE_PATTERNS = [
+    r'^melbet',
+    r'^linebet',
+    r'^ru\s*\d+',
+    r'^\s*1\s*x\s*bet',
+    r'^\s*1x-?bet',
+    r'by\s*\d+\s*$',
+]
+
+def _gsheet_is_ignored(text):
+    if not text:
+        return False
+    import re as __re
+    s = str(text).strip().lower()
+    if not s:
+        return False
+    for pat in GSHEET_IGNORE_PATTERNS:
+        if __re.search(pat, s):
+            return True
+    return False
+
+@app.route('/api/schedule/import-from-gsheet', methods=['POST'])
+@admin_required
+def api_import_from_gsheet():
+    import csv, io, calendar as _cal, re as _re2
+    try:
+        raw = AppSettings.get('gsheet_url', '')
+        sid, gid = _extract_gsheet_ids(raw)
+        if not sid:
+            return jsonify(ok=False, error='Google Sheet URL not configured. Go to Settings and paste the link first.')
+
+        payload = request.get_json(silent=True) or {}
+        year  = int(payload.get('year')  or request.form.get('year')  or datetime.utcnow().year)
+        month = int(payload.get('month') or request.form.get('month') or datetime.utcnow().month)
+        clear_first = str(payload.get('clear_first', request.form.get('clear_first', '1'))) == '1'
+        days_in_month = _cal.monthrange(year, month)[1]
+
+        try:
+            csv_text = _fetch_gsheet_csv(sid, gid)
+        except RuntimeError as e:
+            return jsonify(ok=False, error=str(e)), 502
+
+        all_rows = list(csv.reader(io.StringIO(csv_text)))
+        if len(all_rows) < 2:
+            return jsonify(ok=False, error='Sheet is empty or too short')
+
+        SKIP_WORDS = {'mon','tue','wed','thu','fri','sat','sun',
+                      'пн','вт','ср','чт','пт','сб','вс',
+                      'monday','tuesday','wednesday','thursday','friday','saturday','sunday',
+                      'employee','name','имя','сотрудник'}
+
+        def clean_str(val):
+            if val is None:
+                return ''
+            s = str(val).strip().lower()
+            s = s.replace('\xa0', ' ').replace('\u200b', '')
+            s = _re2.sub(r'\s+', ' ', s).strip()
+            return s
+
+        def norm(raw):
+            """Convert a raw cell into a schedule code or None."""
+            if raw is None:
+                return None
+            v = clean_str(raw)
+            if not v:
+                return None
+            # Silently ignore brand labels appearing as shift cells
+            if _gsheet_is_ignored(v):
+                return None
+            c = EXCEL_MAP.get(v)
+            if c:
+                return c
+            v2 = (v.replace('o','о').replace('c','с').replace('a','а')
+                   .replace('e','е').replace('x','х').replace('p','р')
+                   .replace('h','н').replace('b','в').replace('m','м'))
+            c = EXCEL_MAP.get(v2)
+            if c:
+                return c
+            v3 = _re2.sub(r'^\d+\s*', '', v2).strip()
+            c = EXCEL_MAP.get(v3)
+            if c:
+                return c
+            v4 = _re2.sub(r'^\d+\s*', '', v).strip()
+            c = EXCEL_MAP.get(v4)
+            if c:
+                return c
+            vp = _re2.sub(r'\d+', '', v2).strip()
+            vp = _re2.sub(r'\s+', ' ', vp).strip()
+            is_senior  = bool(_re2.search(r'[сc][сc]|ss', vp))
+            is_trainee = bool(_re2.search(r'[/\\][сcs]', vp))
+            is_dof     = bool(_re2.search(r'[оo][фf]', vp))
+            is_day     = bool(_re2.match(r'д', vp))
+            is_night   = bool(_re2.match(r'н', vp))
+            if is_dof:
+                return 'DOF'
+            if is_senior:
+                if is_day:   return 'DSS'
+                if is_night: return 'NSS'
+            if is_trainee:
+                if is_day:   return 'DS'
+                if is_night: return 'NS'
+            if _re2.match(r'^д\s*$', vp): return 'D'
+            if _re2.match(r'^н\s*$', vp): return 'N'
+            return None
+
+        # ── Auto-detect day-header row (a row containing 1..31 sequential ints) ──
+        col_to_day = {}
+        data_start_row = 2
+        for ri, row in enumerate(all_rows[:8]):
+            day_cols = {}
+            for ci, cell in enumerate(row):
+                if cell is None:
+                    continue
+                sv = str(cell).strip()
+                if not sv:
+                    continue
+                sv = sv.split('/')[-1].split('-')[-1].strip()
+                try:
+                    d = int(float(sv))
+                    if 1 <= d <= 31:
+                        day_cols[ci] = d
+                except Exception:
+                    pass
+            if len(day_cols) >= 20:
+                col_to_day = day_cols
+                data_start_row = ri + 1
+                break
+
+        if not col_to_day:
+            # Fallback — if we cannot detect a date row, assume col B..AF map to days 1..31
+            col_to_day = {i: i for i in range(1, min(32, days_in_month + 1))}
+
+        updated       = 0
+        skipped_label = []
+        not_found     = []
+        matched_emps  = []
+
+        for row in all_rows[data_start_row:]:
+            if not row:
+                continue
+            name_raw = row[0] if len(row) > 0 else ''
+            if not name_raw:
+                continue
+            name_str = str(name_raw).strip()
+            if not name_str:
+                continue
+            low = name_str.lower()
+            if len(name_str) < 2 or low in SKIP_WORDS:
+                continue
+            # skip rows that are pure numbers/dates
+            try:
+                float(name_str.replace('/', '').replace('-', ''))
+                continue
+            except Exception:
+                pass
+            # skip brand / category rows (Melbet 8, linebet, Ru 100, 8 by 4, ...)
+            if _gsheet_is_ignored(name_str):
+                skipped_label.append(name_str)
+                continue
+
+            # clean name: drop trailing " - Ru 100", "-linebet", etc.
+            clean = name_str
+            clean = _re2.sub(r'[-–]\s*(ru|рu)\s*\d+.*', '', clean, flags=_re2.IGNORECASE).strip()
+            clean = _re2.sub(r'[-–]\s*(linebet|melbet|1xbet).*', '', clean, flags=_re2.IGNORECASE).strip()
+            clean = _re2.sub(r'\s*[-–]\s*$', '', clean).strip()   # trailing dash
+
+            emp = User.query.filter(User.name.ilike(f'%{clean}%'), User.role=='employee').first()
+            if not emp:
+                for word in [w for w in clean.split() if len(w) > 2]:
+                    emp = User.query.filter(User.name.ilike(f'%{word}%'), User.role=='employee').first()
+                    if emp:
+                        break
+            if not emp:
+                not_found.append(name_str)
+                continue
+
+            if clear_first:
+                Schedule.query.filter_by(user_id=emp.id, year=year, month=month).delete()
+                db.session.flush()
+
+            matched_emps.append(emp.name)
+
+            for col_idx, day_num in col_to_day.items():
+                if col_idx >= len(row):
+                    continue
+                if day_num < 1 or day_num > days_in_month:
+                    continue
+                cell_val = row[col_idx]
+                code = norm(cell_val)
+                if not code:
+                    continue
+                s = Schedule.query.filter_by(user_id=emp.id, year=year, month=month, day=day_num).first()
+                if s:
+                    s.shift_code = code
+                else:
+                    db.session.add(Schedule(user_id=emp.id, year=year, month=month, day=day_num, shift_code=code))
+                updated += 1
+
+        db.session.commit()
+
+        # Deduplicate and limit
+        matched_emps = sorted(set(matched_emps))
+        not_found    = sorted(set(not_found))
+        skipped_label = sorted(set(skipped_label))
+
+        return jsonify(
+            ok         = True,
+            updated    = updated,
+            matched    = matched_emps,
+            not_found  = not_found,
+            skipped    = skipped_label,
+            col_map_size = len(col_to_day),
+            data_start = data_start_row,
+            year       = year,
+            month      = month,
+        )
+    except Exception as e:
+        import traceback
+        db.session.rollback()
+        return jsonify(ok=False, error=str(e), trace=traceback.format_exc()[:800]), 500
+
+# ─────────────────────────────────────────────
 # API — REQUESTS
 # ─────────────────────────────────────────────
 @app.route('/api/requests')
