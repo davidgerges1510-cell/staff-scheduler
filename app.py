@@ -263,6 +263,30 @@ def send_push_notification(title, message, priority='default'):
                 print(f'[PUSH ERROR] {e}')
     threading.Thread(target=_push, daemon=True).start()
 
+def send_email_sync(to_email, subject, html_body):
+    """Send email synchronously (used for notifications)."""
+    try:
+        smtp_srv  = AppSettings.get('smtp_server', 'smtp.gmail.com')
+        smtp_port = int(AppSettings.get('smtp_port', '587'))
+        smtp_user = AppSettings.get('smtp_user', '')
+        smtp_pass = AppSettings.get('smtp_pass', '')
+        from_name = AppSettings.get('from_name', 'Staff Scheduler')
+        enabled   = AppSettings.get('email_enabled', 'false') == 'true'
+        if not enabled or not smtp_user or not to_email:
+            return
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From']    = f'{from_name} <{smtp_user}>'
+        msg['To']      = to_email
+        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+        with smtplib.SMTP(smtp_srv, smtp_port) as srv:
+            srv.ehlo(); srv.starttls(); srv.ehlo()
+            srv.login(smtp_user, smtp_pass)
+            srv.sendmail(smtp_user, to_email, msg.as_string())
+        print(f'[EMAIL OK] Sent to {to_email}')
+    except Exception as e:
+        print(f'[EMAIL ERROR] {e}')
+
 def send_email_async(to_email, subject, html_body):
     def _send():
         with app.app_context():
@@ -331,7 +355,7 @@ def notify_admin_new_request(emp, req):
         <p style="margin-top:16px;font-size:13px;color:#4a5568">Please log in to the system to review and approve or reject this request.</p>
       </div>
     </div>"""
-    send_email_async(admin_email, subj, html)
+    send_email_sync(admin_email, subj, html)
 
 def notify_and_email(emp, req, admin_note=''):
     ok   = req.status == 'approved'
@@ -393,7 +417,7 @@ def notify_and_email(emp, req, admin_note=''):
         <p style="font-size:12px;color:#718096">Remaining Balance — Annual: <b>{bal_vac} days</b> | Sick: <b>{bal_sick} days</b></p>
       </div>
     </div>"""
-    send_email_async(emp.email, subj, html)
+    send_email_sync(emp.email, subj, html)
 
 # ─────────────────────────────────────────────
 # AUTH ROUTES
