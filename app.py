@@ -4,6 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date, timedelta
 from functools import wraps
 import calendar, os, threading, smtplib, json
+from sqlalchemy.pool import NullPool
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -21,13 +22,10 @@ if not _db_url:
 
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_pre_ping':  True,
-    'pool_recycle':   280,
-    'pool_size':      1,
-    'max_overflow':   0,
-    'connect_args':   {'connect_timeout': 30},
-}
+if 'supabase' in _db_url or 'postgresql' in _db_url:
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'poolclass': NullPool}
+else:
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_recycle': 280}
 db = SQLAlchemy(app)
 
 # ─────────────────────────────────────────────
