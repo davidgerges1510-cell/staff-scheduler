@@ -75,7 +75,8 @@ class User(db.Model):
     day_hours    = db.Column(db.Float, default=12.0)
     night_hours  = db.Column(db.Float, default=12.0)
     sort_order   = db.Column(db.Integer, default=0)
-    ntfy_topic   = db.Column(db.String(100), default='')
+    ntfy_topic      = db.Column(db.String(100), default='')
+    telegram_chat_id = db.Column(db.String(50), default='')
     is_active    = db.Column(db.Boolean, default=True)
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -241,20 +242,20 @@ def add_notification(user_id, ntype, message):
     db.session.add(Notification(user_id=user_id, type=ntype, message=message))
     db.session.commit()
 
-def send_telegram_notification(title, message):
-    """Send Telegram notification to admin."""
+def send_telegram_notification(title, message, chat_id=None):
+    """Send Telegram notification. Uses admin chat_id by default."""
     def _send():
         try:
             import urllib.request as _ur, urllib.parse as _up
             token   = os.environ.get('TELEGRAM_BOT_TOKEN', '')
-            chat_id = os.environ.get('TELEGRAM_CHAT_ID', '')
-            if not token or not chat_id:
+            cid     = chat_id or os.environ.get('TELEGRAM_CHAT_ID', '')
+            if not token or not cid:
                 return
             text = f"*{title}*\n{message}"
             url  = f"https://api.telegram.org/bot{token}/sendMessage"
-            data = _up.urlencode({'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}).encode()
+            data = _up.urlencode({'chat_id': cid, 'text': text, 'parse_mode': 'Markdown'}).encode()
             _ur.urlopen(_ur.Request(url, data=data), timeout=10)
-            print(f'[TELEGRAM OK] Sent: {title}')
+            print(f'[TELEGRAM OK] Sent to {cid}: {title}')
         except Exception as e:
             print(f'[TELEGRAM ERROR] {e}')
     threading.Thread(target=_send, daemon=True).start()
@@ -442,9 +443,38 @@ def notify_and_email(emp, req, admin_note=''):
     </div>"""
     send_email_sync(emp.email, subj, html)
 
+    # Telegram notification to employee
+    if getattr(emp, 'telegram_chat_id', ''):
+        send_telegram_notification(
+            title   = f'{icon} طلبك {word}',
+            message = msg,
+            chat_id = emp.telegram_chat_id
+        )
+
 # ─────────────────────────────────────────────
 # AUTH ROUTES
 # ─────────────────────────────────────────────
+@app.route('/telegram-webhook', methods=['POST'])
+def telegram_webhook():
+    """Handle Telegram bot messages — register employee chat_id on /start"""
+    try:
+        data    = request.get_json(silent=True) or {}
+        message = data.get('message', {})
+        text    = message.get('text', '')
+        chat_id = str(message.get('chat', {}).get('id', ''))
+        username = message.get('chat', {}).get('username', '')
+        token   = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+        import urllib.request as _ur, urllib.parse as _up
+
+        if text.startswith('/start'):
+            reply = f"مرحباً! 👋\nرقم Telegram الخاص بك هو:\n`{chat_id}`\n\nأرسله للمشرف ليربطه بحسابك في التطبيق."
+            url  = f"https://api.telegram.org/bot{token}/sendMessage"
+            _data = _up.urlencode({'chat_id': chat_id, 'text': reply, 'parse_mode': 'Markdown'}).encode()
+            _ur.urlopen(_ur.Request(url, data=_data), timeout=10)
+    except Exception as e:
+        print(f'[WEBHOOK ERROR] {e}')
+    return jsonify(ok=True)
+
 @app.route('/manifest.json')
 def pwa_manifest():
     from flask import Response
@@ -1600,7 +1630,8 @@ def upgrade_db():
         ('night_hours', 'ALTER TABLE "user" ADD COLUMN night_hours FLOAT DEFAULT 12.0'),
         ('sort_order',  'ALTER TABLE "user" ADD COLUMN sort_order INTEGER DEFAULT 0'),
         ('sch_hours',   'ALTER TABLE schedule ADD COLUMN hours FLOAT'),
-        ('ntfy_topic',  'ALTER TABLE "user" ADD COLUMN ntfy_topic VARCHAR(100) DEFAULT \'\''),
+        ('ntfy_topic',       'ALTER TABLE "user" ADD COLUMN ntfy_topic VARCHAR(100) DEFAULT \'\''),
+        ('telegram_chat_id', 'ALTER TABLE "user" ADD COLUMN telegram_chat_id VARCHAR(50) DEFAULT \'\''),
     ]
     with db.engine.connect() as conn:
         for col, sql in cols:
