@@ -241,6 +241,24 @@ def add_notification(user_id, ntype, message):
     db.session.add(Notification(user_id=user_id, type=ntype, message=message))
     db.session.commit()
 
+def send_telegram_notification(title, message):
+    """Send Telegram notification to admin."""
+    def _send():
+        try:
+            import urllib.request as _ur, urllib.parse as _up
+            token   = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+            chat_id = os.environ.get('TELEGRAM_CHAT_ID', '')
+            if not token or not chat_id:
+                return
+            text = f"*{title}*\n{message}"
+            url  = f"https://api.telegram.org/bot{token}/sendMessage"
+            data = _up.urlencode({'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}).encode()
+            _ur.urlopen(_ur.Request(url, data=data), timeout=10)
+            print(f'[TELEGRAM OK] Sent: {title}')
+        except Exception as e:
+            print(f'[TELEGRAM ERROR] {e}')
+    threading.Thread(target=_send, daemon=True).start()
+
 def send_push_notification(title, message, priority='default'):
     """Send push notification via ntfy.sh"""
     def _push():
@@ -326,6 +344,12 @@ def notify_admin_new_request(emp, req):
     else:
         sh     = SHIFTS.get(req.proposed_shift, {}).get('name', req.proposed_shift)
         detail = f'Proposal: {sh} on {req.draft_date}'
+
+    # Telegram notification
+    send_telegram_notification(
+        title   = f'⏳ طلب جديد — {emp.name}',
+        message = detail
+    )
 
     # Push notification (ntfy.sh)
     send_push_notification(
