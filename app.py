@@ -105,6 +105,7 @@ class User(db.Model):
                     day_hours=self.day_hours or 12.0, night_hours=self.night_hours or 12.0,
                     sort_order=self.sort_order or 0,
                     ntfy_topic=self.ntfy_topic or '',
+                    telegram_chat_id=self.telegram_chat_id or '',
                     initials=self.initials())
 
 
@@ -623,6 +624,7 @@ def api_edit_user(uid):
     if 'day_hours'  in d: u.day_hours  = float(d['day_hours'])
     if 'night_hours'in d: u.night_hours= float(d['night_hours'])
     if 'ntfy_topic' in d: u.ntfy_topic = d['ntfy_topic']
+    if 'telegram_chat_id' in d: u.telegram_chat_id = d['telegram_chat_id']
     db.session.commit()
     return jsonify(ok=True, user=u.to_dict())
 
