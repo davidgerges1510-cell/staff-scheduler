@@ -380,7 +380,7 @@ def notify_admin_new_request(emp, req):
         <p style="margin-top:16px;font-size:13px;color:#4a5568">Please log in to the system to review and approve or reject this request.</p>
       </div>
     </div>"""
-    send_email_sync(admin_email, subj, html)
+    send_email_async(admin_email, subj, html)
 
 def notify_and_email(emp, req, admin_note=''):
     ok   = req.status == 'approved'
@@ -442,7 +442,7 @@ def notify_and_email(emp, req, admin_note=''):
         <p style="font-size:12px;color:#718096">Remaining Balance — Annual: <b>{bal_vac} days</b> | Sick: <b>{bal_sick} days</b></p>
       </div>
     </div>"""
-    send_email_sync(emp.email, subj, html)
+    send_email_async(emp.email, subj, html)
 
     # Telegram notification to employee
     if getattr(emp, 'telegram_chat_id', ''):
