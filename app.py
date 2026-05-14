@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date, timedelta
@@ -1431,6 +1431,82 @@ def api_gsheet_info():
         configured = bool(sid),
         sheet_id   = sid or '',
         gid        = gid or '',
+    )
+
+@app.route('/api/gsheet/export')
+@login_required
+def api_gsheet_export():
+    """Fetch the live Google Sheet, sanitize brand names, and return as .xlsx."""
+    import csv, io
+    try:
+        import openpyxl
+        from openpyxl.utils import get_column_letter
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    except ImportError:
+        return jsonify(ok=False, error='openpyxl not installed'), 500
+
+    raw = AppSettings.get('gsheet_url', '')
+    sid, gid = _extract_gsheet_ids(raw)
+    if not sid:
+        return jsonify(ok=False, error='Google Sheet URL not configured'), 400
+
+    try:
+        csv_text = _fetch_gsheet_csv(sid, gid)
+    except RuntimeError as e:
+        return jsonify(ok=False, error=str(e)), 502
+
+    rows = list(csv.reader(io.StringIO(csv_text)))
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Schedule'
+
+    header_font   = Font(bold=True, color='FFFFFF', size=11)
+    header_fill   = PatternFill('solid', fgColor='4F46E5')
+    center        = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    thin          = Side(border_style='thin', color='CBD5E0')
+    border        = Border(top=thin, left=thin, right=thin, bottom=thin)
+    alt_fill      = PatternFill('solid', fgColor='F7FAFC')
+
+    for r_idx, row in enumerate(rows, start=1):
+        for c_idx, cell in enumerate(row, start=1):
+            v = _sanitize_cell(cell) if cell else ''
+            wc = ws.cell(row=r_idx, column=c_idx, value=v)
+            wc.alignment = center
+            wc.border    = border
+            if r_idx == 1:
+                wc.font = header_font
+                wc.fill = header_fill
+            elif r_idx % 2 == 0:
+                wc.fill = alt_fill
+
+    # auto-width columns (basic)
+    max_cols = ws.max_column
+    for col_idx in range(1, max_cols + 1):
+        max_len = 0
+        for row_idx in range(1, ws.max_row + 1):
+            val = ws.cell(row=row_idx, column=col_idx).value
+            if val:
+                ln = len(str(val))
+                if ln > max_len:
+                    max_len = ln
+        width = min(max(max_len + 2, 8), 28)
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+    ws.row_dimensions[1].height = 26
+    ws.freeze_panes = 'A2'
+
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+
+    from datetime import datetime as _dt
+    fname = 'schedule_' + _dt.utcnow().strftime('%Y%m%d_%H%M') + '.xlsx'
+    return send_file(
+        bio,
+        as_attachment=True,
+        download_name=fname,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
 
 @app.route('/api/gsheet/data')
